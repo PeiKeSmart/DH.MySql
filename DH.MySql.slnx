@@ -8,7 +8,12 @@
     <File Path="NuGet.config" />
     <File Path="Readme.MD" />
   </Folder>
+  <Project Path="Benchmark/Benchmark.csproj" />
   <Project Path="DH.MySql.EntityFramework/DH.MySql.EntityFramework.csproj" />
   <Project Path="DH.MySql.EntityFrameworkCore/DH.MySql.EntityFrameworkCore.csproj" />
   <Project Path="DH.MySql/DH.MySql.csproj" />
+  <Project Path="Test/Test.csproj" />
+  <Project Path="UnitTest.EntityFramework/UnitTest.EntityFramework.csproj" />
+  <Project Path="UnitTest.EntityFrameworkCore/UnitTest.EntityFrameworkCore.csproj" />
+  <Project Path="UnitTest/UnitTest.csproj" />
 </Solution>
