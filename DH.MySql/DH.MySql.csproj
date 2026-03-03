@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="Current">
   <PropertyGroup>
     <TargetFrameworks>net45;net461;netstandard2.0;netstandard2.1;net6.0;net8.0;net10.0</TargetFrameworks>
+    <AssemblyName>NewLife.MySql</AssemblyName>
     <AssemblyTitle>沛柯智能MySql驱动</AssemblyTitle>
     <Description>基于DH框架的纯国产高性能MySQL驱动，零第三方依赖，支持管道化批量与真异步</Description>
     <Company>湖北登灏科技有限公司</Company>
@@ -23,7 +24,7 @@
 
   <PropertyGroup>
     <IsPackable>true</IsPackable>
-    <PackageId>$(AssemblyName)</PackageId>
+    <PackageId>DH.MySql</PackageId>
     <Authors>$(Company)</Authors>
     <MaintainerEmail>berin@peksmart.net</MaintainerEmail>
     <PackageProjectUrl>https://www.haocoding.com/</PackageProjectUrl>
