@@ -5,7 +5,7 @@
     <Description>基于DH.MySql的Entity Framework Core数据库提供程序，纯国产高性能MySQL驱动</Description>
     <Company>湖北登灏科技有限公司</Company>
     <Copyright>©2020-2026 湖北登灏科技有限公司</Copyright>
-    <VersionPrefix>4.19</VersionPrefix>
+    <VersionPrefix>4.20</VersionPrefix>
     <VersionSuffix>$([System.DateTime]::Now.ToString(`yyyy.MMdd`))</VersionSuffix>
     <Version>$(VersionPrefix).$(VersionSuffix)</Version>
     <FileVersion>$(Version)</FileVersion>
