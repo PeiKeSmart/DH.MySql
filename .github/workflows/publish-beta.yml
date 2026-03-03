@@ -5,10 +5,14 @@ on:
     branches: [ main ]
     paths:
         - 'DH.MySql/**'
+        - 'DH.MySql.EntityFramework/**'
+        - 'DH.MySql.EntityFrameworkCore/**'
   pull_request:
     branches: [ main ]
     paths:
         - 'DH.MySql/**'
+        - 'DH.MySql.EntityFramework/**'
+        - 'DH.MySql.EntityFrameworkCore/**'
   workflow_dispatch:
 
 jobs:
@@ -21,6 +25,8 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: |
+          6.x
+          7.x
           8.x
           9.x
           10.x
@@ -32,6 +38,8 @@ jobs:
     - name: Pack
       run: |
         dotnet pack --no-build --version-suffix ${{ env.VERSION }} -c Release -o out DH.MySql/DH.MySql.csproj
+        dotnet pack --no-build --version-suffix ${{ env.VERSION }} -c Release -o out DH.MySql.EntityFramework/DH.MySql.EntityFramework.csproj
+        dotnet pack --no-build --version-suffix ${{ env.VERSION }} -c Release -o out DH.MySql.EntityFrameworkCore/DH.MySql.EntityFrameworkCore.csproj
 
     - name: Publish
       run: |
