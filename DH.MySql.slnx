@@ -8,5 +8,7 @@
     <File Path="NuGet.config" />
     <File Path="Readme.MD" />
   </Folder>
+  <Project Path="DH.MySql.EntityFramework/DH.MySql.EntityFramework.csproj" />
+  <Project Path="DH.MySql.EntityFrameworkCore/DH.MySql.EntityFrameworkCore.csproj" />
   <Project Path="DH.MySql/DH.MySql.csproj" />
 </Solution>

@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="Current">
   <PropertyGroup>
-    <TargetFrameworks>net45;net461;netstandard2.0;netstandard2.1;net6.0;net8.0;net10.0</TargetFrameworks>
-    <AssemblyTitle>沛柯智能MySql驱动</AssemblyTitle>
-    <Description>基于DH框架的纯国产高性能MySQL驱动，零第三方依赖，支持管道化批量与真异步</Description>
+    <TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
+    <AssemblyTitle>沛柯智能MySql EF Core驱动</AssemblyTitle>
+    <Description>基于DH.MySql的Entity Framework Core数据库提供程序，纯国产高性能MySQL驱动</Description>
     <Company>湖北登灏科技有限公司</Company>
     <Copyright>©2020-2026 湖北登灏科技有限公司</Copyright>
     <VersionPrefix>4.19</VersionPrefix>
@@ -30,23 +30,8 @@
     <PackageIcon>DH.png</PackageIcon>
     <RepositoryUrl>https://github.com/PeiKeSmart/Pek.AspNetCore</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>湖北登灏科技有限公司;DH组件;DH;MySql;MySQL;ADO.NET;国产;高性能;批量;管道化;$(AssemblyName)</PackageTags>
-    <PackageReleaseNotes>
-      正式版
-      完整ADO.NET实现，支持MySqlConnection/Command/DataReader/Parameter/Transaction全套组件；
-      支持SSL/TLS安全连接、参数化查询、事务自动回滚、多语句多结果集；
-      支持.NET 6.0+ DbBatch批量命令与真管道化执行，大幅提升批量性能；
-      支持MySQL服务端预编译语句与二进制参数绑定；
-      支持GetSchema元数据查询、MySqlDataAdapter、存储过程参数；
-      支持ChangeDatabase/SetDatabaseAsync、连接心跳检测、读取超时控制；
-      支持MySQL Binlog订阅与事件解析；
-      全面异步化，所有核心操作支持异步方法与CancellationToken；
-      新增EF Core Provider与EF6适配层；
-      兼容OceanBase和TiDB数据库自动识别；
-      使用缓冲区与SpanReader优化协议解析，减少GC；
-      修复密码登录、类型转换、Bit解析等问题；
-      支持.NET Framework 4.5至.NET 10全版本，零第三方依赖
-    </PackageReleaseNotes>
+    <PackageTags>湖北登灏科技有限公司;DH组件;DH;MySql;MySQL;ADO.NET;国产;EntityFrameworkCore;EFCore;$(AssemblyName)</PackageTags>
+    <PackageReleaseNotes></PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
@@ -57,8 +42,17 @@
     <!--<GeneratePackageOnBuild>true</GeneratePackageOnBuild>-->
   </PropertyGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' == 'net6.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="6.0.36" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.3" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.3" />
+  </ItemGroup>
+
   <ItemGroup>
-    <PackageReference Include="DH.NCore" Version="4.19.2026.303" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.103">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -68,11 +62,7 @@
     <Using Include="NewLife" />
   </ItemGroup>
   <ItemGroup>
-    <InternalsVisibleTo Include="UnitTest" />
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="ReservedWords.txt">
-    </EmbeddedResource>
+    <ProjectReference Include="..\DH.MySql\DH.MySql.csproj" />
   </ItemGroup>
 
   <ItemGroup>
