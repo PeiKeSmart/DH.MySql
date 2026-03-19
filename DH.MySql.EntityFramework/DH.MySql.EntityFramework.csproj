@@ -1,4 +1,5 @@
-﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="Current">
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="Current">
   <PropertyGroup>
     <TargetFrameworks>net45;net461</TargetFrameworks>
     <AssemblyTitle>沛柯智能MySql EF6提供程序</AssemblyTitle>

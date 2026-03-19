@@ -25,6 +25,9 @@ jobs:
         dotnet restore DH.MySql.EntityFramework/DH.MySql.EntityFramework.csproj
         dotnet restore DH.MySql.EntityFrameworkCore/DH.MySql.EntityFrameworkCore.csproj
     - name: Build
+      env:
+        LANG: en_US.UTF-8
+        LC_ALL: en_US.UTF-8
       run: |
         dotnet pack --no-restore --version-suffix $(date "+%Y.%m%d") -c Release -o out DH.MySql/DH.MySql.csproj
         dotnet pack --no-restore --version-suffix $(date "+%Y.%m%d") -c Release -o out DH.MySql.EntityFramework/DH.MySql.EntityFramework.csproj
