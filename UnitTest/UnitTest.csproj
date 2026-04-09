@@ -15,7 +15,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="DH.NCode" Version="4.21.2026.305-beta0030" />
+    <PackageReference Include="DH.NCode" Version="4.21.2026.326-beta0743" />
     <PackageReference Include="DH.UnitTest" Version="4.21.2026.304-beta0007" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.3.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
