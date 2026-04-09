@@ -1759,6 +1759,28 @@ public class MySqlFieldCodecTests
         Assert.Equal(data, result);
     }
 
+    [Fact(DisplayName = "读取长度编码_三字节")]
+    public void ReadLength_ThreeBytes()
+    {
+        var buffer = new Byte[] { 0xFD, 0x8F, 0xC3, 0x01 };
+        var reader = new SpanReader(buffer);
+
+        var len = reader.ReadLength();
+
+        Assert.Equal(115599, len);
+    }
+
+    [Fact(DisplayName = "读取长度编码_BinaryReader_三字节")]
+    public void ReadLength_BinaryReader_ThreeBytes()
+    {
+        using var stream = new MemoryStream(new Byte[] { 0xFD, 0x8F, 0xC3, 0x01 });
+        using var reader = new BinaryReader(stream);
+
+        var len = reader.ReadLength();
+
+        Assert.Equal(115599, len);
+    }
+
     [Fact(DisplayName = "写入二进制_Guid")]
     public void WriteBinaryValue_Guid()
     {
