@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using NewLife.Collections;
 using NewLife.Log;
 
@@ -9,6 +10,8 @@ public class MySqlPool : ObjectPool<SqlClient>
 {
     /// <summary>设置</summary>
     public MySqlConnectionStringBuilder? Setting { get; set; }
+
+    private readonly SemaphoreSlim _returnSignal = new(0, Int32.MaxValue);
 
     private IDictionary<String, String>? _Variables;
     private DateTime _nextTime;
@@ -38,31 +41,85 @@ public class MySqlPool : ObjectPool<SqlClient>
         return new SqlClient(set);
     }
 
+    /// <summary>异步创建并打开连接。只有打开成功后才会计入借出集合</summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>已打开的连接</returns>
+    protected override async Task<SqlClient?> OnCreateAsync(CancellationToken cancellationToken = default)
+    {
+        var client = OnCreate();
+        await client.OpenAsync(cancellationToken).ConfigureAwait(false);
+        client.LastActive = DateTime.Now;
+        return client;
+    }
+
+    /// <summary>借出前检查连接是否仍然可用</summary>
+    /// <param name="client">连接</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>是否可用</returns>
+    protected override async Task<Boolean> OnGetAsync(SqlClient client, CancellationToken cancellationToken = default)
+    {
+        if (client == null) return false;
+        if (client.Welcome == null) return false;
+
+        if (!client.Active || !client.Reset()) return false;
+
+        if (client.LastActive > DateTime.MinValue && client.LastActive.AddSeconds(60) < DateTime.Now)
+            return await PingWithTimeoutAsync(client, cancellationToken).ConfigureAwait(false);
+
+        return true;
+    }
+
+    /// <summary>归还前检查连接是否可继续复用</summary>
+    /// <param name="client">连接</param>
+    /// <returns>是否进入空闲池</returns>
+    protected override Boolean OnReturn(SqlClient client) => client != null && client.Active && client.Welcome != null;
+
     /// <summary>异步获取连接。剔除无效连接</summary>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>可用的数据库连接</returns>
-    public async Task<SqlClient> GetAsync(CancellationToken cancellationToken = default)
+    public override async Task<SqlClient> GetAsync(CancellationToken cancellationToken = default)
     {
-        var retryCount = 0;
+        var timeout = (Setting?.ConnectionTimeout ?? 15) * 1000;
+        if (timeout <= 0) timeout = 15000;
+
+        var sw = Stopwatch.StartNew();
         while (true)
         {
-            var client = base.Get();
+            cancellationToken.ThrowIfCancellationRequested();
 
-            // 新创建的连接尚未打开，直接返回由调用方打开
-            if (client.Welcome == null) return client;
-
-            // 已打开的连接需要检查是否仍然可用
-            if (!client.Active || !client.Reset() ||
-                client.LastActive.AddSeconds(60) < DateTime.Now && !await PingWithTimeoutAsync(client, cancellationToken).ConfigureAwait(false))
+            try
             {
-                // 连接已失效，丢弃后重试
-                client.TryDispose();
-                if (retryCount++ > 10) throw new InvalidOperationException("无法从连接池获取可用连接");
-                continue;
+                return await base.GetAsync(cancellationToken).ConfigureAwait(false);
             }
+            catch (Exception ex) when (IsPoolExhausted(ex))
+            {
+                var remaining = timeout - (Int32)sw.ElapsedMilliseconds;
+                if (remaining <= 0)
+                    throw new TimeoutException($"获取连接池连接超时({timeout}ms)，最大连接数{Max}", ex);
 
-            return client;
+                var signaled = await _returnSignal.WaitAsync(remaining, cancellationToken).ConfigureAwait(false);
+                if (!signaled)
+                    throw new TimeoutException($"获取连接池连接超时({timeout}ms)，最大连接数{Max}", ex);
+            }
         }
+    }
+
+    /// <summary>归还连接并唤醒一个等待中的请求</summary>
+    /// <param name="client">连接</param>
+    /// <returns>是否成功归还到空闲池</returns>
+    public override Boolean Return(SqlClient client)
+    {
+        var rs = base.Return(client);
+        _returnSignal.Release();
+        return rs;
+    }
+
+    private Boolean IsPoolExhausted(Exception ex)
+    {
+        if (Max <= 0) return false;
+
+        var msg = ex.Message;
+        return !msg.IsNullOrEmpty() && msg.Contains("达到或超过最大值", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>带短超时的异步 Ping 检测</summary>
@@ -95,8 +152,8 @@ public class MySqlPoolManager
             //Name = Name + "Pool",
             //Instance = this,
             Setting = setting,
-            Min = 10,
-            Max = 100000,
+            Min = Math.Max(0, setting.MinPoolSize),
+            Max = Math.Max(1, setting.MaxPoolSize),
             IdleTime = 30,
             AllIdleTime = 300,
             //Log = ClientLog,

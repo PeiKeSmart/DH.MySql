@@ -28,6 +28,15 @@ public class MySqlConnectionStringBuilder : DbConnectionStringBuilder
     /// <summary>命令超时</summary>
     public Int32 CommandTimeout { get => this[nameof(CommandTimeout)].ToInt(); set => this[nameof(CommandTimeout)] = value; }
 
+    /// <summary>是否启用连接池，默认true</summary>
+    public Boolean Pooling { get => this[nameof(Pooling)].ToBoolean(true); set => this[nameof(Pooling)] = value; }
+
+    /// <summary>最小连接池大小，默认0</summary>
+    public Int32 MinPoolSize { get => this[nameof(MinPoolSize)].ToInt(); set => this[nameof(MinPoolSize)] = value; }
+
+    /// <summary>最大连接池大小，默认100</summary>
+    public Int32 MaxPoolSize { get => this[nameof(MaxPoolSize)].ToInt(); set => this[nameof(MaxPoolSize)] = value; }
+
     /// <summary>SSL模式。None/Preferred/Required，默认None</summary>
     public String? SslMode { get => this[nameof(SslMode)] as String; set => this[nameof(SslMode)] = value; }
 
@@ -66,6 +75,9 @@ public class MySqlConnectionStringBuilder : DbConnectionStringBuilder
             [nameof(Password)] = ["pass", "password", "pwd"],
             [nameof(ConnectionTimeout)] = ["connectiontimeout", "connection timeout"],
             [nameof(CommandTimeout)] = ["commandtimeout", "defaultcommandtimeout", "command timeout", "default command timeout"],
+            [nameof(Pooling)] = ["pooling"],
+            [nameof(MinPoolSize)] = ["minpoolsize", "minimum pool size", "min pool size", "minimum poolsize"],
+            [nameof(MaxPoolSize)] = ["maxpoolsize", "maximum pool size", "max pool size", "maximum poolsize"],
             [nameof(SslMode)] = ["sslmode", "ssl mode", "ssl-mode"],
             [nameof(UseServerPrepare)] = ["useserverprepare", "use server prepare", "use_server_prepare"],
             [nameof(Pipeline)] = ["pipeline", "pipelining"],
@@ -81,6 +93,9 @@ public class MySqlConnectionStringBuilder : DbConnectionStringBuilder
         Port = 3306;
         ConnectionTimeout = 15;
         CommandTimeout = 30;
+        Pooling = true;
+        MinPoolSize = 0;
+        MaxPoolSize = 100;
         CharSet = MySqlCharSet.Utf8Mb4;
     }
 
