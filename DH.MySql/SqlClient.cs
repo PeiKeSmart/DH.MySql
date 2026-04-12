@@ -1,5 +1,6 @@
 ﻿using System.Net.Security;
 using System.Net.Sockets;
+using System.Net;
 using System.Security.Authentication;
 using System.Text;
 using System.Diagnostics;
@@ -105,7 +106,8 @@ public class SqlClient : DisposeBase
         if (msTimeout <= 0) msTimeout = 15000;
         var sw = Stopwatch.StartNew();
         var stageSw = Stopwatch.StartNew();
-        var stage = "connect";
+        var stage = "resolve";
+        var resolveMs = 0L;
         var connectMs = 0L;
         var welcomeMs = 0L;
         var sslMs = 0L;
@@ -114,26 +116,95 @@ public class SqlClient : DisposeBase
         using var span = Tracer?.NewSpan($"db:{set.Database}:Open", new { server, port, set.UserID, set.SslMode, set.UseServerPrepare, set.Pipeline });
 
         // 异步连接网络
-        var client = new TcpClient();
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(msTimeout);
+        TcpClient? client = null;
+        const Int32 maxConnectAttempts = 5;
+        var connectAttempt = 0;
+        var connectHost = server;
 
         try
         {
-#if NET5_0_OR_GREATER
-            await client.ConnectAsync(server, port, cts.Token).ConfigureAwait(false);
-#else
-            // .NET Framework 4.5 不支持 ConnectAsync 的 CancellationToken 参数
-            var connectTask = client.ConnectAsync(server, port);
-            var completedTask = await Task.WhenAny(connectTask, Task.Delay(msTimeout, cts.Token)).ConfigureAwait(false);
-            if (completedTask != connectTask)
+            // 分离记录 DNS 解析耗时，便于区分是解析慢还是建连慢
+            if (!IPAddress.TryParse(server, out _) && !server.IsNullOrEmpty())
             {
-                client.Close();
-                throw new TimeoutException($"连接 {server}:{port} 超时({msTimeout}ms)");
-            }
-            await connectTask.ConfigureAwait(false);
+                using var resolveCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                resolveCts.CancelAfter(msTimeout);
+#if NET6_0_OR_GREATER
+                var addresses = await Dns.GetHostAddressesAsync(server, resolveCts.Token).ConfigureAwait(false);
+#else
+                var resolveTask = Dns.GetHostAddressesAsync(server);
+                var resolveCompleted = await Task.WhenAny(resolveTask, Task.Delay(msTimeout, resolveCts.Token)).ConfigureAwait(false);
+                if (resolveCompleted != resolveTask)
+                    throw new TimeoutException($"解析主机 {server} 超时({msTimeout}ms)");
+                var addresses = await resolveTask.ConfigureAwait(false);
 #endif
+
+                if (addresses.Length > 0)
+                    connectHost = addresses[0].ToString();
+            }
+
+            resolveMs = stageSw.ElapsedMilliseconds;
+            stageSw.Restart();
+            stage = "connect";
+
+            while (true)
+            {
+                connectAttempt++;
+
+                var remaining = msTimeout - (Int32)sw.ElapsedMilliseconds;
+                if (remaining <= 0)
+                    throw new TimeoutException($"连接 {server}:{port} 超时({msTimeout}ms)，尝试次数{connectAttempt - 1}");
+
+                // 每次尝试使用较短超时，避免单次卡死；总耗时受 remaining 严格约束
+                var attemptTimeout = Math.Min(remaining, Math.Max(3000, msTimeout / maxConnectAttempts));
+
+                var attemptClient = new TcpClient();
+                using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                attemptCts.CancelAfter(attemptTimeout);
+
+                try
+                {
+#if NET5_0_OR_GREATER
+                    var connectTask = attemptClient.ConnectAsync(connectHost, port, attemptCts.Token).AsTask();
+#else
+                    // .NET Framework 4.5 不支持 ConnectAsync 的 CancellationToken 参数
+                    var connectTask = attemptClient.ConnectAsync(connectHost, port);
+#endif
+                    var completedTask = await Task.WhenAny(connectTask, Task.Delay(attemptTimeout, attemptCts.Token)).ConfigureAwait(false);
+                    if (completedTask != connectTask)
+                    {
+                        attemptClient.Close();
+                        throw new TimeoutException($"连接 {connectHost}:{port} 超时({attemptTimeout}ms)");
+                    }
+
+                    await connectTask.ConfigureAwait(false);
+                    client = attemptClient;
+                    break;
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    attemptClient.Close();
+                    if (connectAttempt >= maxConnectAttempts)
+                        throw new TimeoutException($"连接 {connectHost}:{port} 超时({msTimeout}ms)，尝试次数{connectAttempt}");
+                }
+                catch (TimeoutException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    attemptClient.Close();
+                    if (connectAttempt >= maxConnectAttempts)
+                        throw new TimeoutException($"连接 {connectHost}:{port} 超时({msTimeout}ms)，尝试次数{connectAttempt}");
+                }
+                catch (SocketException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    attemptClient.Close();
+                    if (connectAttempt >= maxConnectAttempts)
+                        throw;
+                }
+                catch (IOException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    attemptClient.Close();
+                    if (connectAttempt >= maxConnectAttempts)
+                        throw;
+                }
+            }
 
             connectMs = stageSw.ElapsedMilliseconds;
             stageSw.Restart();
@@ -142,17 +213,18 @@ public class SqlClient : DisposeBase
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
             span?.SetError(ex);
-            client.Close();
+            client?.Close();
             throw new TimeoutException($"OpenAsync阶段[{stage}]超时，连接 {server}:{port}，耗时{sw.ElapsedMilliseconds}ms，超时配置{msTimeout}ms");
         }
         catch (Exception ex)
         {
             span?.SetError(ex);
-            client.Close();
+            client?.Close();
 
             // 标记失败阶段，便于上层日志定位
             ex.Data["OpenStage"] = stage;
             ex.Data["OpenElapsedMs"] = sw.ElapsedMilliseconds;
+            ex.Data["OpenResolveMs"] = resolveMs;
             ex.Data["OpenConnectMs"] = connectMs;
             ex.Data["OpenWelcomeMs"] = welcomeMs;
             ex.Data["OpenSslMs"] = sslMs;
@@ -161,7 +233,7 @@ public class SqlClient : DisposeBase
         }
 
         // 设置读写超时
-        client.ReceiveTimeout = msTimeout;
+        client!.ReceiveTimeout = msTimeout;
         client.SendTimeout = msTimeout;
 
         _client = client;
@@ -235,6 +307,7 @@ public class SqlClient : DisposeBase
 
             ex.Data["OpenStage"] = stage;
             ex.Data["OpenElapsedMs"] = sw.ElapsedMilliseconds;
+            ex.Data["OpenResolveMs"] = resolveMs;
             ex.Data["OpenConnectMs"] = connectMs;
             ex.Data["OpenWelcomeMs"] = welcomeMs;
             ex.Data["OpenSslMs"] = sslMs;
@@ -254,6 +327,7 @@ public class SqlClient : DisposeBase
 
             ex.Data["OpenStage"] = stage;
             ex.Data["OpenElapsedMs"] = sw.ElapsedMilliseconds;
+            ex.Data["OpenResolveMs"] = resolveMs;
             ex.Data["OpenConnectMs"] = connectMs;
             ex.Data["OpenWelcomeMs"] = welcomeMs;
             ex.Data["OpenSslMs"] = sslMs;
@@ -274,6 +348,7 @@ public class SqlClient : DisposeBase
             // 标记失败阶段，便于上层日志定位
             ex.Data["OpenStage"] = stage;
             ex.Data["OpenElapsedMs"] = sw.ElapsedMilliseconds;
+            ex.Data["OpenResolveMs"] = resolveMs;
             ex.Data["OpenConnectMs"] = connectMs;
             ex.Data["OpenWelcomeMs"] = welcomeMs;
             ex.Data["OpenSslMs"] = sslMs;
