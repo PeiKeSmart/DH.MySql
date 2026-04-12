@@ -104,7 +104,12 @@ public class SqlClient : DisposeBase
         var msTimeout = set.ConnectionTimeout * 1000;
         if (msTimeout <= 0) msTimeout = 15000;
         var sw = Stopwatch.StartNew();
+        var stageSw = Stopwatch.StartNew();
         var stage = "connect";
+        var connectMs = 0L;
+        var welcomeMs = 0L;
+        var sslMs = 0L;
+        var authMs = 0L;
 
         using var span = Tracer?.NewSpan($"db:{set.Database}:Open", new { server, port, set.UserID, set.SslMode, set.UseServerPrepare, set.Pipeline });
 
@@ -130,6 +135,8 @@ public class SqlClient : DisposeBase
             await connectTask.ConfigureAwait(false);
 #endif
 
+            connectMs = stageSw.ElapsedMilliseconds;
+            stageSw.Restart();
             stage = "welcome";
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
@@ -142,6 +149,14 @@ public class SqlClient : DisposeBase
         {
             span?.SetError(ex);
             client.Close();
+
+            // 标记失败阶段，便于上层日志定位
+            ex.Data["OpenStage"] = stage;
+            ex.Data["OpenElapsedMs"] = sw.ElapsedMilliseconds;
+            ex.Data["OpenConnectMs"] = connectMs;
+            ex.Data["OpenWelcomeMs"] = welcomeMs;
+            ex.Data["OpenSslMs"] = sslMs;
+            ex.Data["OpenAuthMs"] = authMs;
             throw;
         }
 
@@ -158,6 +173,8 @@ public class SqlClient : DisposeBase
             var welcome = await GetWelcomeAsync(cancellationToken).ConfigureAwait(false);
             Welcome = welcome;
             Capability = welcome.Capability;
+            welcomeMs = stageSw.ElapsedMilliseconds;
+            stageSw.Restart();
 
             // SSL/TLS 握手
             stage = "ssl";
@@ -169,6 +186,8 @@ public class SqlClient : DisposeBase
                 else if (sslMode.EqualIgnoreCase("Required"))
                     throw new NotSupportedException("服务器不支持 SSL 连接");
             }
+            sslMs = stageSw.ElapsedMilliseconds;
+            stageSw.Restart();
 
             // 验证方法
             var method = welcome.AuthMethod;
@@ -179,6 +198,7 @@ public class SqlClient : DisposeBase
             stage = "auth";
             var auth = new Authentication(this);
             await auth.AuthenticateAsync(welcome, false, cancellationToken).ConfigureAwait(false);
+            authMs = stageSw.ElapsedMilliseconds;
 
             // 认证成功后，将 Capability 更新为实际协商的客户端标志
             Capability = auth.GetFlags(welcome.Capability);
@@ -189,6 +209,18 @@ public class SqlClient : DisposeBase
             // 认证成功后才标记为活动状态
             Active = true;
             stage = "done";
+
+            // 成功连接时记录阶段耗时，便于比对不同驱动/网络环境差异
+            using var detail = Tracer?.NewSpan($"db:{set.Database}:OpenStage", new
+            {
+                connectMs,
+                welcomeMs,
+                sslMs,
+                authMs,
+                totalMs = sw.ElapsedMilliseconds,
+                sslMode,
+                authMethod = method,
+            });
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
@@ -200,7 +232,33 @@ public class SqlClient : DisposeBase
             _stream = null;
             Welcome = null;
             Active = false;
+
+            ex.Data["OpenStage"] = stage;
+            ex.Data["OpenElapsedMs"] = sw.ElapsedMilliseconds;
+            ex.Data["OpenConnectMs"] = connectMs;
+            ex.Data["OpenWelcomeMs"] = welcomeMs;
+            ex.Data["OpenSslMs"] = sslMs;
+            ex.Data["OpenAuthMs"] = authMs;
             throw new TimeoutException($"OpenAsync阶段[{stage}]超时，连接 {server}:{port}，耗时{sw.ElapsedMilliseconds}ms，超时配置{msTimeout}ms");
+        }
+        catch (TimeoutException ex)
+        {
+            span?.SetError(ex);
+
+            // 认证/握手失败时清理资源，避免半初始化状态
+            _client.TryDispose();
+            _client = null;
+            _stream = null;
+            Welcome = null;
+            Active = false;
+
+            ex.Data["OpenStage"] = stage;
+            ex.Data["OpenElapsedMs"] = sw.ElapsedMilliseconds;
+            ex.Data["OpenConnectMs"] = connectMs;
+            ex.Data["OpenWelcomeMs"] = welcomeMs;
+            ex.Data["OpenSslMs"] = sslMs;
+            ex.Data["OpenAuthMs"] = authMs;
+            throw new TimeoutException($"OpenAsync阶段[{stage}]超时，连接 {server}:{port}，耗时{sw.ElapsedMilliseconds}ms，超时配置{msTimeout}ms，内部错误：{ex.Message}", ex);
         }
         catch (Exception ex)
         {
@@ -212,6 +270,14 @@ public class SqlClient : DisposeBase
             _stream = null;
             Welcome = null;
             Active = false;
+
+            // 标记失败阶段，便于上层日志定位
+            ex.Data["OpenStage"] = stage;
+            ex.Data["OpenElapsedMs"] = sw.ElapsedMilliseconds;
+            ex.Data["OpenConnectMs"] = connectMs;
+            ex.Data["OpenWelcomeMs"] = welcomeMs;
+            ex.Data["OpenSslMs"] = sslMs;
+            ex.Data["OpenAuthMs"] = authMs;
             throw;
         }
 
