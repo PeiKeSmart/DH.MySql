@@ -1,4 +1,5 @@
-﻿using System.Net.Security;
+﻿using System.Collections.Concurrent;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Text;
@@ -17,6 +18,8 @@ namespace NewLife.MySql;
 public class SqlClient : DisposeBase
 {
     private const Int32 PacketTraceBytes = 512;
+    private static readonly TimeSpan SslFallbackPeriod = TimeSpan.FromMinutes(10);
+    private static readonly ConcurrentDictionary<String, DateTime> _sslFallbacks = new();
 
     #region 属性
     /// <summary>连接字符串配置</summary>
@@ -91,6 +94,15 @@ public class SqlClient : DisposeBase
     /// <returns>异步任务</returns>
     public async Task OpenAsync(CancellationToken cancellationToken = default)
     {
+        await OpenAsync(true, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>异步打开到 MySQL 服务器的连接</summary>
+    /// <param name="allowSsl">是否允许尝试 SSL/TLS 握手</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>异步任务</returns>
+    private async Task OpenAsync(Boolean allowSsl, CancellationToken cancellationToken)
+    {
         if (Active) return;
         if (_stream != null) return;
         cancellationToken.ThrowIfCancellationRequested();
@@ -101,6 +113,7 @@ public class SqlClient : DisposeBase
 
         var port = set.Port;
         if (port == 0) port = 3306;
+        var sslFallbackKey = GetSslFallbackKey(set, server, port);
 
         var msTimeout = set.ConnectionTimeout * 1000;
         if (msTimeout <= 0) msTimeout = 15000;
@@ -158,10 +171,42 @@ public class SqlClient : DisposeBase
 
             // SSL/TLS 握手
             var sslMode = set.SslMode;
-            if (!sslMode.IsNullOrEmpty() && !sslMode.EqualIgnoreCase("None", "Disabled"))
+            if (allowSsl && !sslMode.IsNullOrEmpty() && !sslMode.EqualIgnoreCase("None", "Disabled"))
             {
-                if (Capability.Has(ClientFlags.SSL))
-                    await StartSslAsync(server!, cancellationToken).ConfigureAwait(false);
+                if (sslMode.EqualIgnoreCase("Preferred") && CanSkipSsl(sslFallbackKey))
+                {
+                    XTrace.WriteLine("[MySqlSsl] db={0} server={1}:{2} SslMode=Preferred skip TLS and use cached plain-text fallback",
+                        set.Database, server, port);
+                }
+                else if (Capability.Has(ClientFlags.SSL))
+                {
+                    try
+                    {
+                        await StartSslAsync(server!, cancellationToken).ConfigureAwait(false);
+                        ClearSslFallback(sslFallbackKey);
+                    }
+                    catch (Exception ex) when (sslMode.EqualIgnoreCase("Preferred"))
+                    {
+                        MarkSslFallback(sslFallbackKey);
+                        XTrace.WriteLine("[MySqlSsl] db={0} server={1}:{2} SslMode=Preferred fallback to plain text: {3}: {4}",
+                            set.Database, server, port, ex.GetType().Name, ex.Message);
+
+                        _client.TryDispose();
+                        _client = null;
+                        _stream = null;
+                        _reader.Reset();
+                        Welcome = null;
+                        Variables = null;
+                        MaxPacketSize = 0;
+                        Database = null!;
+                        Capability = 0;
+                        Active = false;
+                        _seq = 1;
+
+                        await OpenAsync(false, cancellationToken).ConfigureAwait(false);
+                        return;
+                    }
+                }
                 else if (sslMode.EqualIgnoreCase("Required"))
                     throw new NotSupportedException("服务器不支持 SSL 连接");
             }
@@ -199,6 +244,21 @@ public class SqlClient : DisposeBase
 
         //_timer = new TimerX(s => { _ = PingAsync(); }, null, 10_000, 30_000) { Async = true };
     }
+
+    private static String GetSslFallbackKey(MySqlConnectionStringBuilder setting, String server, Int32 port) => $"{server}:{port}|{setting.UserID}";
+
+    private static Boolean CanSkipSsl(String key)
+    {
+        if (!_sslFallbacks.TryGetValue(key, out var expireAt)) return false;
+        if (expireAt > DateTime.UtcNow) return true;
+
+        _sslFallbacks.TryRemove(key, out _);
+        return false;
+    }
+
+    private static void MarkSslFallback(String key) => _sslFallbacks[key] = DateTime.UtcNow.Add(SslFallbackPeriod);
+
+    private static void ClearSslFallback(String key) => _sslFallbacks.TryRemove(key, out _);
 
     /// <summary>异步发送SSL请求并升级为TLS连接</summary>
     /// <param name="server">服务器地址</param>
