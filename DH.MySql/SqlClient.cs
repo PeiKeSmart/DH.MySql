@@ -16,6 +16,8 @@ namespace NewLife.MySql;
 /// <summary>客户端</summary>
 public class SqlClient : DisposeBase
 {
+    private const Int32 PacketTraceBytes = 512;
+
     #region 属性
     /// <summary>连接字符串配置</summary>
     public MySqlConnectionStringBuilder Setting { get; } = [];
@@ -399,6 +401,7 @@ public class SqlClient : DisposeBase
 
             pk.Resize(len);
             rs.Set(pk);
+            WritePacketLog("<=", rs.Sequence, pk.GetSpan(), len);
 
             // 错误包
             if (rs.IsError)
@@ -424,6 +427,33 @@ public class SqlClient : DisposeBase
         }
     }
 
+    private void WritePacketLog(String direction, Byte sequence, ReadOnlySpan<Byte> payload, Int32 length)
+    {
+        if (!Setting.TracePackets) return;
+
+        var size = Math.Min(length, PacketTraceBytes);
+        var data = size > 0 ? payload[..size].ToArray().ToHex() : String.Empty;
+        var suffix = size < length ? "..." : String.Empty;
+        var kind = length > 0 ? GetPacketKind(direction, payload[0]) : "Empty";
+
+        XTrace.WriteLine("[MySqlPacket] {0} db={1} seq={2} len={3} kind={4} data={5}{6}",
+            direction, Database, sequence, length, kind, data, suffix);
+    }
+
+    private static String GetPacketKind(String direction, Byte firstByte)
+    {
+        if (direction == "=>")
+            return Enum.IsDefined(typeof(DbCmd), firstByte) ? ((DbCmd)firstByte).ToString() : $"0x{firstByte:X2}";
+
+        return firstByte switch
+        {
+            0x00 => "OK",
+            0xFF => "ERROR",
+            0xFE => "EOF/OK_END",
+            _ => $"0x{firstByte:X2}"
+        };
+    }
+
     /// <summary>异步发送 MySQL 协议数据包。建议数据包头部预留4字节空间以填充帧头</summary>
     /// <param name="pk">待发送的数据包</param>
     /// <param name="cancellationToken">取消令牌</param>
@@ -440,6 +470,8 @@ public class SqlClient : DisposeBase
         pk2[1] = (Byte)((len >> 8) & 0xFF);
         pk2[2] = (Byte)((len >> 16) & 0xFF);
         pk2[3] = _seq++;
+
+        WritePacketLog("=>", pk2[3], pk2.GetSpan(), len);
 
         await pk2.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
         if (flush) await ms.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -759,6 +791,7 @@ public class SqlClient : DisposeBase
                 _rowBuffer = new Byte[len];
 
             await _reader.ReadAsync(ms, _rowBuffer, 0, len, token).ConfigureAwait(false);
+            WritePacketLog("<=", (Byte)(_seq - 1), new ReadOnlySpan<Byte>(_rowBuffer, 0, len), len);
 
             // 错误包
             if (_rowBuffer[0] == 0xFF)
