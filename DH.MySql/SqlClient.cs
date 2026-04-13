@@ -431,10 +431,11 @@ public class SqlClient : DisposeBase
     {
         if (!Setting.TracePackets) return;
 
-        var size = Math.Min(length, PacketTraceBytes);
+        var available = Math.Min(Math.Max(length, 0), payload.Length);
+        var size = Math.Min(available, PacketTraceBytes);
         var data = size > 0 ? payload[..size].ToArray().ToHex() : String.Empty;
-        var suffix = size < length ? "..." : String.Empty;
-        var kind = length > 0 ? GetPacketKind(direction, payload[0]) : "Empty";
+        var suffix = size < available ? "..." : String.Empty;
+        var kind = size > 0 ? GetPacketKind(direction, payload[0]) : "Empty";
 
         XTrace.WriteLine("[MySqlPacket] {0} db={1} seq={2} len={3} kind={4} data={5}{6}",
             direction, Database, sequence, length, kind, data, suffix);
@@ -471,7 +472,13 @@ public class SqlClient : DisposeBase
         pk2[2] = (Byte)((len >> 16) & 0xFF);
         pk2[3] = _seq++;
 
-        WritePacketLog("=>", pk2[3], pk2.GetSpan(), len);
+        var payload = pk2.GetSpan();
+        if (payload.Length >= len + 4)
+            payload = payload.Slice(4, len);
+        else if (payload.Length > len)
+            payload = payload.Slice(payload.Length - len, len);
+
+        WritePacketLog("=>", pk2[3], payload, len);
 
         await pk2.CopyToAsync(ms, cancellationToken).ConfigureAwait(false);
         if (flush) await ms.FlushAsync(cancellationToken).ConfigureAwait(false);
