@@ -148,22 +148,15 @@ public sealed partial class MySqlConnection : DbConnection
 
         SetState(ConnectionState.Connecting);
 
-        SqlClient? client = null;
-        var fromPool = false;
-
         try
         {
-            client = Client;
+            var client = Client;
             if (client == null)
             {
                 // 根据连接字符串创建连接池,然后从连接池获取连接
-                _pool = Setting.Pooling ? Factory?.PoolManager?.GetPool(Setting) : null;
+                _pool = Factory?.PoolManager?.GetPool(Setting);
 
-                if (_pool != null)
-                {
-                    client = await _pool.GetAsync(cancellationToken).ConfigureAwait(false);
-                    fromPool = true;
-                }
+                if (_pool != null) client = await _pool.GetAsync(cancellationToken).ConfigureAwait(false);
                 client ??= new SqlClient(Setting);
 
                 cancellationToken.ThrowIfCancellationRequested();
@@ -228,18 +221,6 @@ public sealed partial class MySqlConnection : DbConnection
         }
         catch (Exception)
         {
-            if (client != null && fromPool && _pool != null)
-            {
-                client.TryDispose();
-                _pool.Return(client);
-            }
-            else
-            {
-                client.TryDispose();
-            }
-
-            Client = null;
-            _pool = null;
             SetState(ConnectionState.Closed);
             throw;
         }
