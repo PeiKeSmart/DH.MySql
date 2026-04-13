@@ -267,7 +267,8 @@ public class SqlClient : DisposeBase
     private async Task StartSslAsync(String server, CancellationToken cancellationToken)
     {
         // 发送 SSL 请求包
-        var flags = Capability | ClientFlags.SSL;
+        var auth = new Authentication(this);
+        var flags = auth.GetFlags(Capability) | ClientFlags.SSL;
         var buf = new Byte[32];
         var writer = new SpanWriter(buf);
         writer.Write((UInt32)flags);
