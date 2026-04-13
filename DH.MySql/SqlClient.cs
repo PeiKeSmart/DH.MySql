@@ -2,7 +2,6 @@
 using System.Net.Sockets;
 using System.Security.Authentication;
 using System.Text;
-using System.Diagnostics;
 using NewLife.Buffers;
 using NewLife.Collections;
 using NewLife.Data;
@@ -103,8 +102,6 @@ public class SqlClient : DisposeBase
 
         var msTimeout = set.ConnectionTimeout * 1000;
         if (msTimeout <= 0) msTimeout = 15000;
-        var sw = Stopwatch.StartNew();
-        var stage = "connect";
 
         using var span = Tracer?.NewSpan($"db:{set.Database}:Open", new { server, port, set.UserID, set.SslMode, set.UseServerPrepare, set.Pipeline });
 
@@ -129,14 +126,12 @@ public class SqlClient : DisposeBase
             }
             await connectTask.ConfigureAwait(false);
 #endif
-
-            stage = "welcome";
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
             span?.SetError(ex);
             client.Close();
-            throw new TimeoutException($"OpenAsync阶段[{stage}]超时，连接 {server}:{port}，耗时{sw.ElapsedMilliseconds}ms，超时配置{msTimeout}ms");
+            throw new TimeoutException($"连接 {server}:{port} 超时({msTimeout}ms)");
         }
         catch (Exception ex)
         {
@@ -160,7 +155,6 @@ public class SqlClient : DisposeBase
             Capability = welcome.Capability;
 
             // SSL/TLS 握手
-            stage = "ssl";
             var sslMode = set.SslMode;
             if (!sslMode.IsNullOrEmpty() && !sslMode.EqualIgnoreCase("None", "Disabled"))
             {
@@ -176,7 +170,6 @@ public class SqlClient : DisposeBase
                 throw new NotSupportedException("不支持验证方式 " + method);
 
             // 异步验证
-            stage = "auth";
             var auth = new Authentication(this);
             await auth.AuthenticateAsync(welcome, false, cancellationToken).ConfigureAwait(false);
 
@@ -188,19 +181,6 @@ public class SqlClient : DisposeBase
 
             // 认证成功后才标记为活动状态
             Active = true;
-            stage = "done";
-        }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-        {
-            span?.SetError(ex);
-
-            // 认证/握手失败时清理资源，避免半初始化状态
-            _client.TryDispose();
-            _client = null;
-            _stream = null;
-            Welcome = null;
-            Active = false;
-            throw new TimeoutException($"OpenAsync阶段[{stage}]超时，连接 {server}:{port}，耗时{sw.ElapsedMilliseconds}ms，超时配置{msTimeout}ms");
         }
         catch (Exception ex)
         {
