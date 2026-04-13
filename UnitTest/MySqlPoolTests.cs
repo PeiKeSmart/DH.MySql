@@ -2,6 +2,7 @@
 using System.Data;
 using NewLife;
 using NewLife.MySql;
+using NewLife.MySql.Common;
 
 namespace UnitTest;
 
@@ -143,6 +144,36 @@ public class MySqlPoolTests
 
         // 设置 null 后内部值为 null，getter 返回 null
         Assert.Null(pool.Variables);
+    }
+
+    [Fact]
+    [DisplayName("SetServerInfo后可读取缓存的服务器信息")]
+    public void WhenServerInfoSetThenCanGet()
+    {
+        var pool = new MySqlPool();
+
+        pool.SetServerInfo("8.0.36", "MySQL Community Server", DatabaseType.MySQL);
+
+        var rs = pool.TryGetServerInfo(out var serverVersion, out var serverVersionComment, out var databaseType);
+
+        Assert.True(rs);
+        Assert.Equal("8.0.36", serverVersion);
+        Assert.Equal("MySQL Community Server", serverVersionComment);
+        Assert.Equal(DatabaseType.MySQL, databaseType);
+    }
+
+    [Fact]
+    [DisplayName("未设置ServerInfo时返回false")]
+    public void WhenServerInfoMissingThenReturnsFalse()
+    {
+        var pool = new MySqlPool();
+
+        var rs = pool.TryGetServerInfo(out var serverVersion, out var serverVersionComment, out var databaseType);
+
+        Assert.False(rs);
+        Assert.Null(serverVersion);
+        Assert.Null(serverVersionComment);
+        Assert.Equal(DatabaseType.MySQL, databaseType);
     }
 
     [Fact]
