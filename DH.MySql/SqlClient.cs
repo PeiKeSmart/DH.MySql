@@ -431,14 +431,22 @@ public class SqlClient : DisposeBase
     {
         if (!Setting.TracePackets) return;
 
-        var available = Math.Min(Math.Max(length, 0), payload.Length);
-        var size = Math.Min(available, PacketTraceBytes);
-        var data = size > 0 ? payload[..size].ToArray().ToHex() : String.Empty;
-        var suffix = size < available ? "..." : String.Empty;
-        var kind = size > 0 ? GetPacketKind(direction, payload[0]) : "Empty";
+        try
+        {
+            var available = Math.Min(Math.Max(length, 0), payload.Length);
+            var size = Math.Min(available, PacketTraceBytes);
+            var data = size > 0 ? payload[..size].ToArray().ToHex() : String.Empty;
+            var suffix = size < available ? "..." : String.Empty;
+            var kind = size > 0 ? GetPacketKind(direction, payload[0]) : "Empty";
 
-        XTrace.WriteLine("[MySqlPacket] {0} db={1} seq={2} len={3} kind={4} data={5}{6}",
-            direction, Database, sequence, length, kind, data, suffix);
+            XTrace.WriteLine("[MySqlPacket] {0} db={1} seq={2} len={3} kind={4} data={5}{6}",
+                direction, Database, sequence, length, kind, data, suffix);
+        }
+        catch (Exception ex)
+        {
+            XTrace.WriteLine("[MySqlPacket] {0} db={1} seq={2} len={3} logging-failed={4}: {5}",
+                direction, Database, sequence, length, ex.GetType().Name, ex.Message);
+        }
     }
 
     private static String GetPacketKind(String direction, Byte firstByte)
