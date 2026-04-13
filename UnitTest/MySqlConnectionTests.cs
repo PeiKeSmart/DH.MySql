@@ -1,6 +1,7 @@
 ﻿using System.Data;
 using NewLife;
 using NewLife.MySql;
+using NewLife.Reflection;
 
 namespace UnitTest;
 
@@ -50,6 +51,21 @@ public class MySqlConnectionTests
         Assert.Equal(ConnectionState.Open, connection.State);
 
         connection.Close();
+        Assert.Equal(ConnectionState.Closed, connection.State);
+    }
+
+    [Fact]
+    public void TestCloseWhenStateClosedStillClearsClient()
+    {
+        var connection = new MySqlConnection(_ConnStr);
+        var client = new SqlClient(connection.Setting);
+
+        connection.Client = client;
+        connection.SetValue("_State", ConnectionState.Closed);
+
+        connection.Close();
+
+        Assert.Null(connection.Client);
         Assert.Equal(ConnectionState.Closed, connection.State);
     }
 
