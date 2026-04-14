@@ -158,18 +158,10 @@ public class MySqlConnectionStringBuilderTests
     }
 
     [Fact]
-    [DisplayName("TracePackets默认值为false")]
-    public void TestTracePacketsDefault()
-    {
-        var builder = new MySqlConnectionStringBuilder();
-        Assert.False(builder.TracePackets);
-    }
-
-    [Fact]
     [DisplayName("解析包含所有参数的连接字符串")]
     public void TestFullConnectionString()
     {
-        var connStr = "server=myhost;port=3307;database=mydb;uid=admin;pwd=secret;connectiontimeout=20;commandtimeout=60;sslmode=Required;useserverprepare=true;pipeline=true;tracepackets=true";
+        var connStr = "server=myhost;port=3307;database=mydb;uid=admin;pwd=secret;connectiontimeout=20;commandtimeout=60;sslmode=Required;useserverprepare=true;pipeline=true";
         var builder = new MySqlConnectionStringBuilder(connStr);
 
         Assert.Equal("myhost", builder.Server);
@@ -182,7 +174,6 @@ public class MySqlConnectionStringBuilderTests
         Assert.Equal("Required", builder.SslMode);
         Assert.True(builder.UseServerPrepare);
         Assert.True(builder.Pipeline);
-        Assert.True(builder.TracePackets);
     }
 
     [Fact]
@@ -192,14 +183,5 @@ public class MySqlConnectionStringBuilderTests
         var builder = new MySqlConnectionStringBuilder();
         builder["pipelining"] = true;
         Assert.True(builder.Pipeline);
-    }
-
-    [Fact]
-    [DisplayName("TracePackets别名packet trace可正确解析")]
-    public void TestTracePacketsAlias()
-    {
-        var builder = new MySqlConnectionStringBuilder();
-        builder["packet trace"] = true;
-        Assert.True(builder.TracePackets);
     }
 }

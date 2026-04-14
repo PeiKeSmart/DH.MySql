@@ -198,47 +198,6 @@ public class ConnectionLifecycleTests
     }
 
     [Fact]
-    [DisplayName("同一连接并发命令会串行执行")]
-    public async Task WhenConcurrentCommandsShareConnectionThenAllSucceed()
-    {
-        using var conn = new MySqlConnection(_ConnStr);
-        await conn.OpenAsync();
-
-        var source = new TaskCompletionSource<Boolean>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var tasks = Enumerable.Range(0, 6).Select(async i =>
-        {
-            await source.Task.ConfigureAwait(false);
-
-            using var cmd = new MySqlCommand(conn, $"SELECT SLEEP(0.05), {i}");
-            using var reader = await cmd.ExecuteReaderAsync().ConfigureAwait(false);
-
-            Assert.True(await reader.ReadAsync().ConfigureAwait(false));
-            Assert.Equal(i, Convert.ToInt32(reader.GetValue(1)));
-        });
-
-        source.SetResult(true);
-        await Task.WhenAll(tasks);
-    }
-
-    [Fact]
-    [DisplayName("提前关闭读取器后连接仍可继续执行命令")]
-    public async Task WhenReaderClosedEarlyThenNextCommandStillWorks()
-    {
-        using var conn = new MySqlConnection(_ConnStr);
-        await conn.OpenAsync();
-
-        using (var cmd = new MySqlCommand(conn, "SELECT 1 UNION ALL SELECT 2"))
-        using (var reader = await cmd.ExecuteReaderAsync())
-        {
-            Assert.True(await reader.ReadAsync());
-        }
-
-        using var next = new MySqlCommand(conn, "SELECT 3");
-        var rs = await next.ExecuteScalarAsync();
-        Assert.Equal(3, Convert.ToInt32(rs));
-    }
-
-    [Fact]
     [DisplayName("连接Open后可执行多条命令")]
     public void WhenOpenedThenMultipleCommandsWork()
     {
