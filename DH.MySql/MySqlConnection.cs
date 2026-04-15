@@ -157,7 +157,7 @@ public sealed partial class MySqlConnection : DbConnection
             if (client == null)
             {
                 // 根据连接字符串创建连接池,然后从连接池获取连接
-                _pool = Factory?.PoolManager?.GetPool(Setting);
+                _pool = Setting.Pooling ? Factory?.PoolManager?.GetPool(Setting) : null;
 
                 if (_pool != null)
                 {
@@ -378,6 +378,38 @@ public sealed partial class MySqlConnection : DbConnection
     {
         var provider = _schemaProvider ??= new SchemaProvider(this);
         return provider.GetSchema(collectionName, restrictionValues).AsDataTable();
+    }
+
+    /// <summary>清理与指定连接关联的连接池</summary>
+    /// <param name="connection">连接</param>
+    public static void ClearPool(MySqlConnection connection)
+    {
+        if (connection == null) throw new ArgumentNullException(nameof(connection));
+        connection.Factory.PoolManager.ClearPool(connection.Setting);
+    }
+
+    /// <summary>异步清理与指定连接关联的连接池</summary>
+    /// <param name="connection">连接</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>异步任务</returns>
+    public static Task ClearPoolAsync(MySqlConnection connection, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ClearPool(connection);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>清理所有连接池</summary>
+    public static void ClearAllPools() => MySqlClientFactory.Instance.PoolManager.ClearAllPools();
+
+    /// <summary>异步清理所有连接池</summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>异步任务</returns>
+    public static Task ClearAllPoolsAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ClearAllPools();
+        return Task.CompletedTask;
     }
     #endregion
 

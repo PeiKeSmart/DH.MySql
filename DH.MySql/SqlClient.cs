@@ -377,6 +377,8 @@ public class SqlClient : DisposeBase
 
         return dic;
     }
+
+    internal void ResetSequence() => _seq = 0;
     #endregion
 
     #region 网络操作
@@ -691,6 +693,32 @@ public class SqlClient : DisposeBase
             _timer = null;
             return false;
         }
+    }
+
+    /// <summary>异步重置当前会话状态。优先使用 COM_RESET_CONNECTION，失败时回退到 COM_CHANGE_USER。</summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>异步任务</returns>
+    public async Task ResetConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        if (!Active || _stream == null) throw new InvalidOperationException("连接未打开");
+        if (Welcome == null) throw new InvalidOperationException("握手信息不存在");
+
+        try
+        {
+            await SendCommandAsync(DbCmd.RESET_CONNECTION, cancellationToken).ConfigureAwait(false);
+
+            using var rs = await ReadPacketAsync(cancellationToken).ConfigureAwait(false);
+            if (!rs.IsOK) throw new MySqlException("重置连接失败");
+        }
+        catch (MySqlException ex) when (ex.ErrorCode == 1047 || ex.ErrorCode == 1064)
+        {
+            var auth = new Authentication(this);
+            await auth.AuthenticateAsync(Welcome, true, cancellationToken).ConfigureAwait(false);
+        }
+
+        Variables = null;
+        Database = Setting.Database ?? String.Empty;
+        _reader.Reset();
     }
 
     /// <summary>异步切换当前数据库。使用 COM_INIT_DB 二进制命令</summary>

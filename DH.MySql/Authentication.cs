@@ -19,11 +19,41 @@ class Authentication(SqlClient client)
     public async Task AuthenticateAsync(WelcomeMessage welcome, Boolean reset, CancellationToken cancellationToken)
     {
         var set = client.Setting;
+        var method = welcome.AuthMethod!;
+        var seed = welcome.Seed!;
+        var pass = method.Contains("sha2") ? GetSha256Password(set.Password!, seed) : Get411Password(set.Password!, seed);
 
         // 从共享池申请内存，跳过4字节头部，便于SendPacket内部填充帧头
         using var pk = new OwnerPacket(1024);
         var writer = new SpanWriter(pk);
         writer.Advance(4);
+
+        if (reset)
+        {
+            client.ResetSequence();
+            writer.Write((Byte)DbCmd.CHANGE_USER);
+            writer.WriteZeroString(set.UserID!);
+            writer.WriteByte(pass.Length);
+            writer.Write(pass);
+            writer.WriteZeroString(set.Database ?? String.Empty);
+            writer.Write((UInt16)set.GetCharSetNumber());
+            writer.WriteZeroString(method);
+
+            var attrs2 = GetConnectAttrs().GetBytes();
+            writer.WriteLength(attrs2.Length);
+            writer.Write(attrs2);
+
+            var pk3 = pk.Slice(4, writer.Position - 4);
+            await client.SendPacketAsync(pk3, cancellationToken).ConfigureAwait(false);
+
+            using var rs3 = await client.ReadPacketAsync(cancellationToken).ConfigureAwait(false);
+            if (rs3.IsEOF)
+                await ToNativePasswordAsync(rs3, set.Password!, cancellationToken).ConfigureAwait(false);
+            else if (rs3.Data[0] == 0x01 && rs3.Data[1] == 0x04)
+                await PerformFullAuthenticationAsync(set.Password!, seed, cancellationToken).ConfigureAwait(false);
+
+            return;
+        }
 
         // 设置连接标识
         var flags2 = GetFlags(welcome.Capability);
@@ -32,20 +62,14 @@ class Authentication(SqlClient client)
         writer.Write(set.GetCharSetNumber()); // 字符集编号，默认utf8mb4
         writer.Write(new Byte[23]);
 
-        var method = welcome.AuthMethod!;
-
         // 写入用户名密码
-        var seed = welcome.Seed!;
         writer.WriteZeroString(set.UserID!);
-        var pass = method.Contains("sha2") ? GetSha256Password(set.Password!, seed) : Get411Password(set.Password!, seed);
         writer.WriteByte(pass.Length);
         writer.Write(pass);
 
         // 写入数据库
         var db = set.Database;
         if (!db.IsNullOrEmpty()) writer.WriteZeroString(db);
-
-        if (reset) writer.Write((UInt16)8);
 
         //writer.WriteZeroString("mysql_native_password");
         writer.WriteZeroString(method);

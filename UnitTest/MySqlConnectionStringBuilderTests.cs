@@ -18,6 +18,10 @@ public class MySqlConnectionStringBuilderTests
         Assert.Null(builder.Password);
         Assert.Equal(15, builder.ConnectionTimeout);
         Assert.Equal(30, builder.CommandTimeout);
+        Assert.True(builder.Pooling);
+        Assert.Equal(0, builder.MinimumPoolSize);
+        Assert.Equal(100, builder.MaximumPoolSize);
+        Assert.False(builder.ConnectionReset);
     }
 
     [Fact]
@@ -33,6 +37,7 @@ public class MySqlConnectionStringBuilderTests
         Assert.Equal("1234", builder.Password);
         Assert.Equal(15, builder.ConnectionTimeout);
         Assert.Equal(30, builder.CommandTimeout);
+        Assert.True(builder.Pooling);
     }
 
     [Fact]
@@ -56,6 +61,53 @@ public class MySqlConnectionStringBuilderTests
         Assert.Equal("1234", builder.Password);
         Assert.Equal(15, builder.ConnectionTimeout);
         Assert.Equal(30, builder.CommandTimeout);
+    }
+
+    [Theory]
+    [InlineData("pooling")]
+    [DisplayName("Pooling属性支持别名")]
+    public void TestPoolingAliases(String alias)
+    {
+        var builder = new MySqlConnectionStringBuilder();
+        builder[alias] = false;
+        Assert.False(builder.Pooling);
+    }
+
+    [Theory]
+    [InlineData("minpoolsize")]
+    [InlineData("minimumpoolsize")]
+    [InlineData("min pool size")]
+    [InlineData("minimum pool size")]
+    [DisplayName("MinimumPoolSize属性支持多种别名")]
+    public void TestMinimumPoolSizeAliases(String alias)
+    {
+        var builder = new MySqlConnectionStringBuilder();
+        builder[alias] = 2;
+        Assert.Equal(2, builder.MinimumPoolSize);
+    }
+
+    [Theory]
+    [InlineData("maxpoolsize")]
+    [InlineData("maximumpoolsize")]
+    [InlineData("max pool size")]
+    [InlineData("maximum pool size")]
+    [DisplayName("MaximumPoolSize属性支持多种别名")]
+    public void TestMaximumPoolSizeAliases(String alias)
+    {
+        var builder = new MySqlConnectionStringBuilder();
+        builder[alias] = 8;
+        Assert.Equal(8, builder.MaximumPoolSize);
+    }
+
+    [Theory]
+    [InlineData("connectionreset")]
+    [InlineData("connection reset")]
+    [DisplayName("ConnectionReset属性支持多种别名")]
+    public void TestConnectionResetAliases(String alias)
+    {
+        var builder = new MySqlConnectionStringBuilder();
+        builder[alias] = true;
+        Assert.True(builder.ConnectionReset);
     }
 
     [Theory]
@@ -161,7 +213,7 @@ public class MySqlConnectionStringBuilderTests
     [DisplayName("解析包含所有参数的连接字符串")]
     public void TestFullConnectionString()
     {
-        var connStr = "server=myhost;port=3307;database=mydb;uid=admin;pwd=secret;connectiontimeout=20;commandtimeout=60;sslmode=Required;useserverprepare=true;pipeline=true";
+        var connStr = "server=myhost;port=3307;database=mydb;uid=admin;pwd=secret;connectiontimeout=20;commandtimeout=60;pooling=false;minpoolsize=1;maxpoolsize=8;connection reset=true;sslmode=Required;useserverprepare=true;pipeline=true";
         var builder = new MySqlConnectionStringBuilder(connStr);
 
         Assert.Equal("myhost", builder.Server);
@@ -171,6 +223,10 @@ public class MySqlConnectionStringBuilderTests
         Assert.Equal("secret", builder.Password);
         Assert.Equal(20, builder.ConnectionTimeout);
         Assert.Equal(60, builder.CommandTimeout);
+        Assert.False(builder.Pooling);
+        Assert.Equal(1, builder.MinimumPoolSize);
+        Assert.Equal(8, builder.MaximumPoolSize);
+        Assert.True(builder.ConnectionReset);
         Assert.Equal("Required", builder.SslMode);
         Assert.True(builder.UseServerPrepare);
         Assert.True(builder.Pipeline);
