@@ -342,4 +342,32 @@ public class MySqlPoolTests
         Assert.True(pool1.BeingCleared);
         Assert.True(pool2.BeingCleared);
     }
+
+    [Fact]
+    [DisplayName("刚归还到连接池的连接可跳过Ping验活")]
+    public void WhenConnectionReturnedRecentlyThenSkipPing()
+    {
+        var now = DateTime.UtcNow;
+
+        Assert.False(MySqlPool.ShouldPing(now.AddSeconds(-1), now, 3));
+    }
+
+    [Fact]
+    [DisplayName("闲置较久的连接需要执行Ping验活")]
+    public void WhenConnectionIdleTooLongThenPingRequired()
+    {
+        var now = DateTime.UtcNow;
+
+        Assert.True(MySqlPool.ShouldPing(now.AddSeconds(-10), now, 3));
+        Assert.True(MySqlPool.ShouldPing(DateTime.MinValue, now, 3));
+    }
+
+    [Fact]
+    [DisplayName("PoolPingWindow为0时每次都执行Ping验活")]
+    public void WhenPoolPingWindowIsZeroThenAlwaysPing()
+    {
+        var now = DateTime.UtcNow;
+
+        Assert.True(MySqlPool.ShouldPing(now.AddSeconds(-1), now, 0));
+    }
 }

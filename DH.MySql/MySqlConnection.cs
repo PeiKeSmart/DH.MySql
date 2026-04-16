@@ -1,5 +1,6 @@
 ﻿using System.Data;
 using System.Data.Common;
+using System.Text;
 using NewLife.MySql.Common;
 
 namespace NewLife.MySql;
@@ -49,6 +50,7 @@ public sealed partial class MySqlConnection : DbConnection
 
     private MySqlPool? _pool;
     private SchemaProvider? _schemaProvider;
+    private Dictionary<String, DataTable>? _schemaCache;
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     #endregion
 
@@ -92,6 +94,7 @@ public sealed partial class MySqlConnection : DbConnection
 
         Client = null;
         _pool = null;
+        ClearSchemaCache();
 
         if (client != null)
         {
@@ -149,7 +152,7 @@ public sealed partial class MySqlConnection : DbConnection
         SetState(ConnectionState.Connecting);
 
         SqlClient? borrowedClient = null;
-        Boolean clientAttached = false;
+        var clientAttached = false;
 
         try
         {
@@ -340,6 +343,7 @@ public sealed partial class MySqlConnection : DbConnection
         {
             Setting.Database = databaseName;
             _pool = null;
+            ClearSchemaCache();
             return;
         }
 
@@ -376,8 +380,38 @@ public sealed partial class MySqlConnection : DbConnection
     /// <summary>获取架构信息</summary>
     public override DataTable GetSchema(String? collectionName, String?[]? restrictionValues)
     {
+        var cacheKey = GetSchemaCacheKey(collectionName, restrictionValues);
+        if (_schemaCache != null && _schemaCache.TryGetValue(cacheKey, out var cached))
+            return cached.Copy();
+
         var provider = _schemaProvider ??= new SchemaProvider(this);
-        return provider.GetSchema(collectionName, restrictionValues).AsDataTable();
+        var table = provider.GetSchema(collectionName, restrictionValues).AsDataTable();
+        var cache = _schemaCache ??= new Dictionary<String, DataTable>(StringComparer.Ordinal);
+        cache[cacheKey] = table.Copy();
+
+        return cache[cacheKey].Copy();
+    }
+
+    private void ClearSchemaCache()
+    {
+        _schemaProvider = null;
+        _schemaCache = null;
+    }
+
+    private static String GetSchemaCacheKey(String? collectionName, String?[]? restrictionValues)
+    {
+        var builder = new StringBuilder();
+        builder.Append(collectionName?.ToUpperInvariant() ?? SchemaProvider.MetaCollection.ToUpperInvariant());
+
+        if (restrictionValues == null || restrictionValues.Length == 0) return builder.ToString();
+
+        foreach (var item in restrictionValues)
+        {
+            builder.Append('\u001F');
+            builder.Append(item ?? "<null>");
+        }
+
+        return builder.ToString();
     }
 
     /// <summary>清理与指定连接关联的连接池</summary>
@@ -396,7 +430,7 @@ public sealed partial class MySqlConnection : DbConnection
     {
         cancellationToken.ThrowIfCancellationRequested();
         ClearPool(connection);
-        return Task.CompletedTask;
+        return Task.FromResult(0);
     }
 
     /// <summary>清理所有连接池</summary>
@@ -409,7 +443,7 @@ public sealed partial class MySqlConnection : DbConnection
     {
         cancellationToken.ThrowIfCancellationRequested();
         ClearAllPools();
-        return Task.CompletedTask;
+        return Task.FromResult(0);
     }
     #endregion
 

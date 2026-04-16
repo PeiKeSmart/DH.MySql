@@ -22,6 +22,7 @@ public class MySqlConnectionStringBuilderTests
         Assert.Equal(0, builder.MinimumPoolSize);
         Assert.Equal(100, builder.MaximumPoolSize);
         Assert.False(builder.ConnectionReset);
+        Assert.Equal(3, builder.PoolPingWindow);
     }
 
     [Fact]
@@ -108,6 +109,19 @@ public class MySqlConnectionStringBuilderTests
         var builder = new MySqlConnectionStringBuilder();
         builder[alias] = true;
         Assert.True(builder.ConnectionReset);
+    }
+
+    [Theory]
+    [InlineData("poolpingwindow")]
+    [InlineData("pool ping window")]
+    [InlineData("poolpinginterval")]
+    [InlineData("pool ping interval")]
+    [DisplayName("PoolPingWindow属性支持多种别名")]
+    public void TestPoolPingWindowAliases(String alias)
+    {
+        var builder = new MySqlConnectionStringBuilder();
+        builder[alias] = 0;
+        Assert.Equal(0, builder.PoolPingWindow);
     }
 
     [Theory]
@@ -213,7 +227,7 @@ public class MySqlConnectionStringBuilderTests
     [DisplayName("解析包含所有参数的连接字符串")]
     public void TestFullConnectionString()
     {
-        var connStr = "server=myhost;port=3307;database=mydb;uid=admin;pwd=secret;connectiontimeout=20;commandtimeout=60;pooling=false;minpoolsize=1;maxpoolsize=8;connection reset=true;sslmode=Required;useserverprepare=true;pipeline=true";
+        var connStr = "server=myhost;port=3307;database=mydb;uid=admin;pwd=secret;connectiontimeout=20;commandtimeout=60;pooling=false;minpoolsize=1;maxpoolsize=8;connection reset=true;pool ping window=0;sslmode=Required;useserverprepare=true;pipeline=true";
         var builder = new MySqlConnectionStringBuilder(connStr);
 
         Assert.Equal("myhost", builder.Server);
@@ -227,6 +241,7 @@ public class MySqlConnectionStringBuilderTests
         Assert.Equal(1, builder.MinimumPoolSize);
         Assert.Equal(8, builder.MaximumPoolSize);
         Assert.True(builder.ConnectionReset);
+        Assert.Equal(0, builder.PoolPingWindow);
         Assert.Equal("Required", builder.SslMode);
         Assert.True(builder.UseServerPrepare);
         Assert.True(builder.Pipeline);

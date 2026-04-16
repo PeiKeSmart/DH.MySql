@@ -132,6 +132,7 @@ public class MySqlPool : ObjectPool<SqlClient>
             return;
         }
 
+        value.LastReturnedTime = DateTime.UtcNow;
         base.Return(value);
         _returnSignal.Release();
     }
@@ -169,7 +170,7 @@ public class MySqlPool : ObjectPool<SqlClient>
             // 先清理可能残留的协议数据，再按连接超时做一次验活。
             if (!client.Reset()) return false;
 
-            if (!await client.PingAsync(cancellationToken).ConfigureAwait(false)) return false;
+            if (ShouldPing(client.LastReturnedTime, DateTime.UtcNow, set.PoolPingWindow) && !await client.PingAsync(cancellationToken).ConfigureAwait(false)) return false;
             if (set.ConnectionReset)
                 await client.ResetConnectionAsync(cancellationToken).ConfigureAwait(false);
 
@@ -183,6 +184,15 @@ public class MySqlPool : ObjectPool<SqlClient>
         {
             if (previousTimeout > 0) client.Timeout = previousTimeout;
         }
+    }
+
+    internal static Boolean ShouldPing(DateTime lastReturnedTime, DateTime now, Int32 poolPingWindow)
+    {
+        if (lastReturnedTime <= DateTime.MinValue) return true;
+
+        if (poolPingWindow <= 0) return true;
+
+        return now - lastReturnedTime > TimeSpan.FromSeconds(poolPingWindow);
     }
 
     private static Boolean IsPoolExhausted(Exception ex) => ex.Message.Contains("申请失败") || ex.Message.Contains("最大值");

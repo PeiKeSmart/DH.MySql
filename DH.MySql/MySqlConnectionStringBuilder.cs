@@ -40,6 +40,9 @@ public class MySqlConnectionStringBuilder : DbConnectionStringBuilder
     /// <summary>从连接池借出连接时是否执行会话重置。默认false</summary>
     public Boolean ConnectionReset { get => TryGetValue(nameof(ConnectionReset), out var value) && value.ToBoolean(); set => this[nameof(ConnectionReset)] = value; }
 
+    /// <summary>连接归还连接池后，短时间复用时跳过Ping验活的窗口期。单位秒，默认3，0表示每次都Ping</summary>
+    public Int32 PoolPingWindow { get => TryGetValue(nameof(PoolPingWindow), out var value) ? Math.Max(0, value.ToInt()) : 3; set => this[nameof(PoolPingWindow)] = Math.Max(0, value); }
+
     /// <summary>SSL模式。None/Preferred/Required，默认None</summary>
     public String? SslMode { get => this[nameof(SslMode)] as String; set => this[nameof(SslMode)] = value; }
 
@@ -85,6 +88,7 @@ public class MySqlConnectionStringBuilder : DbConnectionStringBuilder
             [nameof(MinimumPoolSize)] = ["minpoolsize", "minimumpoolsize", "min pool size", "minimum pool size"],
             [nameof(MaximumPoolSize)] = ["maxpoolsize", "maximumpoolsize", "max pool size", "maximum pool size"],
             [nameof(ConnectionReset)] = ["connectionreset", "connection reset"],
+            [nameof(PoolPingWindow)] = ["poolpingwindow", "pool ping window", "poolpinginterval", "pool ping interval"],
             [nameof(SslMode)] = ["sslmode", "ssl mode", "ssl-mode"],
             [nameof(UseServerPrepare)] = ["useserverprepare", "use server prepare", "use_server_prepare"],
             [nameof(Pipeline)] = ["pipeline", "pipelining"],
@@ -105,6 +109,7 @@ public class MySqlConnectionStringBuilder : DbConnectionStringBuilder
         MinimumPoolSize = 0;
         MaximumPoolSize = 100;
         ConnectionReset = false;
+        PoolPingWindow = 3;
         CharSet = MySqlCharSet.Utf8Mb4;
     }
 

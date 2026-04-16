@@ -206,7 +206,7 @@ public class MySqlCommand : DbCommand
                 OriginalTimeout = previousTimeout,
                 RestoreTimeoutOnClose = true,
                 CommandPhaseTimeout = CommandTimeout,
-                ReadPhaseTimeout = previousTimeout
+                ReadPhaseTimeout = CommandTimeout > 0 ? CommandTimeout : previousTimeout
             };
             var isBinary = await ExecuteAsync(cancellationToken).ConfigureAwait(false);
             reader.IsBinaryProtocol = isBinary;
