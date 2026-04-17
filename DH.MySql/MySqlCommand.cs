@@ -137,7 +137,20 @@ public class MySqlCommand : DbCommand
         var paramOrder = new List<Int32>();
         var prepSql = ConvertToPositionalParameters(sql, _parameters, paramOrder);
 
-        var result = await client.PrepareStatementAsync(prepSql, cancellationToken).ConfigureAwait(false);
+        PrepareResult result;
+        try
+        {
+            result = await client.PrepareStatementAsync(prepSql, cancellationToken).ConfigureAwait(false);
+        }
+        catch (MySqlException ex)
+        {
+            var sqlInfo = BuildPrepareSqlInfo(sql, prepSql);
+            if (!ex.State.IsNullOrEmpty())
+                throw new MySqlException(ex.ErrorCode, ex.State, $"{ex.Message} SQL={sqlInfo}");
+
+            throw new MySqlException(ex.ErrorCode, $"{ex.Message} SQL={sqlInfo}");
+        }
+
         _statementId = result.StatementId;
         _paramColumns = result.Columns;
         _paramOrder = paramOrder.Count > 0 ? paramOrder.ToArray() : null;
@@ -905,6 +918,26 @@ public class MySqlCommand : DbCommand
                     break;
             }
         }
+    }
+
+    private static String BuildPrepareSqlInfo(String originalSql, String preparedSql)
+    {
+        var original = ShortenSqlForError(originalSql);
+        var prepared = ShortenSqlForError(preparedSql);
+
+        if (original == prepared) return prepared;
+
+        return $"original:{original}; prepared:{prepared}";
+    }
+
+    private static String ShortenSqlForError(String sql)
+    {
+        if (sql.IsNullOrEmpty()) return String.Empty;
+
+        var normalized = sql.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        if (normalized.Length <= 512) return normalized;
+
+        return normalized[..512] + "...";
     }
     #endregion
 }
