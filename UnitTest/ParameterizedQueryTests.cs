@@ -683,6 +683,31 @@ public class ParameterizedQueryTests : IDisposable
         var result = CallConvert("SELECT @unknown, @id FROM t", ps);
         Assert.Equal("SELECT @unknown, ? FROM t", result);
     }
+
+    [Fact]
+    public void NormalizeUpdateTrailingCommaBeforeWhere()
+    {
+        var sql = "Update Device Set Name=?Name,UpdateTime=?UpdateTime, Where Id=?Id";
+
+        var result = MySqlCommand.NormalizeCommandSql(sql);
+
+        Assert.Equal("Update Device Set Name=?Name,UpdateTime=?UpdateTime  Where Id=?Id", result);
+    }
+
+    [Fact]
+    public void ConvertQuestionMarkUpdateAfterNormalize()
+    {
+        var ps = new MySqlParameterCollection();
+        ps.AddWithValue("Name", "dev");
+        ps.AddWithValue("UpdateTime", DateTime.Parse("2026-04-24 16:23:44"));
+        ps.AddWithValue("Id", 123);
+
+        var sql = "Update Device Set Name=?Name,UpdateTime=?UpdateTime, Where Id=?Id";
+        var normalized = MySqlCommand.NormalizeCommandSql(sql);
+        var result = CallConvert(normalized, ps);
+
+        Assert.Equal("Update Device Set Name=?,UpdateTime=?  Where Id=?", result);
+    }
     #endregion
 
     #region 辅助方法
