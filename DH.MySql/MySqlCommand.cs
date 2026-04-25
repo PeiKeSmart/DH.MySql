@@ -212,14 +212,15 @@ public class MySqlCommand : DbCommand
         // 执行读取器，多语句由服务端拆分，通过NextResult()遍历
         try
         {
+            var effectiveCommandTimeout = GetEffectiveCommandTimeout(CommandTimeout, conn, previousTimeout);
             var reader = new MySqlDataReader
             {
                 Command = this,
                 OperationLease = operationLease,
                 OriginalTimeout = previousTimeout,
                 RestoreTimeoutOnClose = true,
-                CommandPhaseTimeout = CommandTimeout,
-                ReadPhaseTimeout = CommandTimeout > 0 ? CommandTimeout : previousTimeout
+                CommandPhaseTimeout = effectiveCommandTimeout,
+                ReadPhaseTimeout = effectiveCommandTimeout
             };
             var isBinary = await ExecuteAsync(cancellationToken).ConfigureAwait(false);
             reader.IsBinaryProtocol = isBinary;
@@ -453,6 +454,19 @@ public class MySqlCommand : DbCommand
         }
 
         return ordered;
+    }
+
+    internal static Int32 GetEffectiveCommandTimeout(Int32 commandTimeout, MySqlConnection connection, Int32 fallbackTimeout)
+    {
+        if (connection == null) throw new ArgumentNullException(nameof(connection));
+
+        var timeout = commandTimeout;
+        if (timeout > 0) return timeout;
+
+        timeout = connection.Setting.CommandTimeout;
+        if (timeout > 0) return timeout;
+
+        return fallbackTimeout;
     }
 
     private readonly struct BatchParameterBinding(MySqlParameter parameter)

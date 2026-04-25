@@ -40,6 +40,28 @@ public class MySqlCommandTimeoutTests
     }
 
     [Fact]
+    [DisplayName("命令阶段超时在命令未显式设置时回退到连接字符串CommandTimeout")]
+    public void CommandPhaseTimeout_ShouldFallbackToConnectionCommandTimeout()
+    {
+        var conn = new MySqlConnection("server=localhost;database=test;connection timeout=15;command timeout=66");
+
+        var timeout = MySqlCommand.GetEffectiveCommandTimeout(0, conn, 15);
+
+        Assert.Equal(66, timeout);
+    }
+
+    [Fact]
+    [DisplayName("命令阶段超时不应错误退回到连接超时")]
+    public void CommandPhaseTimeout_ShouldNotFallbackToConnectionTimeout()
+    {
+        var conn = new MySqlConnection("server=localhost;database=test;connection timeout=15;command timeout=30");
+
+        var timeout = MySqlCommand.GetEffectiveCommandTimeout(0, conn, 15);
+
+        Assert.Equal(30, timeout);
+    }
+
+    [Fact]
     [DisplayName("累计超时预算会按剩余时间递减")]
     public void TimeoutBudget_ShouldUseRemainingWindow()
     {
