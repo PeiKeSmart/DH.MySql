@@ -50,9 +50,6 @@ public class SqlClient : DisposeBase
     /// <summary>读取超时。单位秒，默认15秒，0表示不超时</summary>
     public Int32 Timeout { get; set; } = 15;
 
-    private Int32 _timeoutBudget = -1;
-    private Int32 _timeoutBudgetSource = -1;
-
     /// <summary>最后活跃时间。最后一次发送指令的时间</summary>
     public DateTime LastActive { get; set; }
 
@@ -331,8 +328,6 @@ public class SqlClient : DisposeBase
         _client = null;
         _stream = null;
         _reader.Reset();
-        _timeoutBudget = -1;
-        _timeoutBudgetSource = -1;
 
         Active = false;
     }
@@ -399,8 +394,6 @@ public class SqlClient : DisposeBase
 
         // 清除读前置缓冲区中的残留数据
         _reader.Reset();
-        _timeoutBudget = -1;
-        _timeoutBudgetSource = -1;
 
         try
         {
@@ -448,13 +441,12 @@ public class SqlClient : DisposeBase
         var ms = _stream ?? throw new InvalidOperationException("未打开连接");
 
         var timeout = Timeout;
-        var msTimeout = GetRemainingTimeoutMilliseconds(timeout);
+        var msTimeout = GetReadTimeoutMilliseconds(timeout);
         using var cts = timeout > 0
             ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
             : null;
         cts?.CancelAfter(msTimeout);
         var token = cts?.Token ?? cancellationToken;
-        var start = Runtime.TickCount64;
 
         try
         {
@@ -498,48 +490,11 @@ public class SqlClient : DisposeBase
         {
             // 超时导致的取消，标记连接不可用
             Active = false;
-            _timeoutBudget = 0;
             throw new TimeoutException($"读取数据包超时({timeout}s)");
         }
-        finally
-        {
-            ConsumeTimeoutBudget(timeout, Runtime.TickCount64 - start);
-        }
     }
 
-    internal void RestartTimeoutBudget() => RestartTimeoutBudget(Timeout);
-
-    internal void RestartTimeoutBudget(Int32 timeout)
-    {
-        _timeoutBudgetSource = timeout;
-        _timeoutBudget = timeout > 0 ? checked(timeout * 1000) : 0;
-    }
-
-    internal Int32 GetRemainingTimeoutMilliseconds() => GetRemainingTimeoutMilliseconds(Timeout);
-
-    internal Int32 GetRemainingTimeoutMilliseconds(Int32 timeout)
-    {
-        if (timeout <= 0) return global::System.Threading.Timeout.Infinite;
-
-        if (_timeoutBudgetSource != timeout || _timeoutBudget < 0)
-            RestartTimeoutBudget(timeout);
-
-        if (_timeoutBudget <= 0)
-            throw new TimeoutException($"读取数据包超时({timeout}s)");
-
-        return _timeoutBudget;
-    }
-
-    internal void ConsumeTimeoutBudget(Int64 elapsedMilliseconds) => ConsumeTimeoutBudget(Timeout, elapsedMilliseconds);
-
-    private void ConsumeTimeoutBudget(Int32 timeout, Int64 elapsedMilliseconds)
-    {
-        if (timeout <= 0 || elapsedMilliseconds <= 0 || _timeoutBudget <= 0) return;
-
-        var elapsed = elapsedMilliseconds > Int32.MaxValue ? Int32.MaxValue : (Int32)elapsedMilliseconds;
-        var remaining = _timeoutBudget - elapsed;
-        _timeoutBudget = remaining > 0 ? remaining : 0;
-    }
+    internal static Int32 GetReadTimeoutMilliseconds(Int32 timeout) => timeout > 0 ? checked(timeout * 1000) : global::System.Threading.Timeout.Infinite;
 
     private void WritePacketLog(String direction, Byte sequence, ReadOnlySpan<Byte> payload, Int32 length)
     {
@@ -593,9 +548,6 @@ public class SqlClient : DisposeBase
         pk2[1] = (Byte)((len >> 8) & 0xFF);
         pk2[2] = (Byte)((len >> 16) & 0xFF);
         pk2[3] = _seq++;
-
-        if (pk2[3] == 0)
-            RestartTimeoutBudget();
 
         var payload = pk2.GetSpan();
         if (payload.Length >= len + 4)
@@ -929,13 +881,12 @@ public class SqlClient : DisposeBase
         var ms = _stream ?? throw new InvalidOperationException("未打开连接");
 
         var timeout = Timeout;
-        var msTimeout = GetRemainingTimeoutMilliseconds(timeout);
+        var msTimeout = GetReadTimeoutMilliseconds(timeout);
         using var cts = timeout > 0
             ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
             : null;
         cts?.CancelAfter(msTimeout);
         var token = cts?.Token ?? cancellationToken;
-        var start = Runtime.TickCount64;
 
         try
         {
@@ -974,12 +925,7 @@ public class SqlClient : DisposeBase
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             Active = false;
-            _timeoutBudget = 0;
             throw new TimeoutException($"读取数据包超时({timeout}s)");
-        }
-        finally
-        {
-            ConsumeTimeoutBudget(timeout, Runtime.TickCount64 - start);
         }
     }
 

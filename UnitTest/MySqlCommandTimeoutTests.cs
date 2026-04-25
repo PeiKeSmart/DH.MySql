@@ -62,32 +62,17 @@ public class MySqlCommandTimeoutTests
     }
 
     [Fact]
-    [DisplayName("累计超时预算会按剩余时间递减")]
-    public void TimeoutBudget_ShouldUseRemainingWindow()
+    [DisplayName("读包超时按单次读取独立计算")]
+    public void ReadTimeout_ShouldUseFullWindowEveryRead()
     {
-        var client = new SqlClient
-        {
-            Timeout = 15
-        };
-
-        client.RestartTimeoutBudget(15);
-        client.ConsumeTimeoutBudget(5_000);
-
-        Assert.Equal(10_000, client.GetRemainingTimeoutMilliseconds(15));
+        Assert.Equal(15_000, SqlClient.GetReadTimeoutMilliseconds(15));
+        Assert.Equal(15_000, SqlClient.GetReadTimeoutMilliseconds(15));
     }
 
     [Fact]
-    [DisplayName("切换超时值时会重建累计超时预算")]
-    public void TimeoutBudget_ShouldRestartWhenTimeoutChanges()
+    [DisplayName("读包超时为0时不限制等待")]
+    public void ReadTimeout_ShouldBeInfiniteWhenTimeoutIsZero()
     {
-        var client = new SqlClient
-        {
-            Timeout = 15
-        };
-
-        client.RestartTimeoutBudget(15);
-        client.ConsumeTimeoutBudget(5_000);
-
-        Assert.Equal(30_000, client.GetRemainingTimeoutMilliseconds(30));
+        Assert.Equal(global::System.Threading.Timeout.Infinite, SqlClient.GetReadTimeoutMilliseconds(0));
     }
 }

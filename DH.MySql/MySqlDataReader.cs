@@ -71,8 +71,6 @@ public class MySqlDataReader : DbDataReader
 
     private Boolean _hasReadResult;
 
-    private Boolean _readPhaseTimeoutStarted;
-
     /// <summary>是否使用二进制协议读取行数据（COM_STMT_EXECUTE 预编译语句结果集）</summary>
     internal Boolean IsBinaryProtocol { get; set; }
 
@@ -327,11 +325,6 @@ public class MySqlDataReader : DbDataReader
 
         var client = (Command.Connection as MySqlConnection)!.Client!;
         SetClientTimeout(client, ReadPhaseTimeout);
-        if (!_readPhaseTimeoutStarted)
-        {
-            client.RestartTimeoutBudget();
-            _readPhaseTimeoutStarted = true;
-        }
 
         // 复用上一行的数组，避免每行分配一个新 Object[]，减少 GC 压力
         var values = _Values;
@@ -347,7 +340,6 @@ public class MySqlDataReader : DbDataReader
             // EOF 到达，记录是否有更多结果集
             _hasMoreResults = result.HasMoreResults;
             _allRowsConsumed = true;
-            _readPhaseTimeoutStarted = false;
             return false;
         }
 
@@ -367,11 +359,6 @@ public class MySqlDataReader : DbDataReader
         if (_FieldCount > 0 && !_allRowsConsumed)
         {
             SetClientTimeout(client, ReadPhaseTimeout);
-            if (!_readPhaseTimeoutStarted)
-            {
-                client.RestartTimeoutBudget();
-                _readPhaseTimeoutStarted = true;
-            }
 
             while (true)
             {
@@ -380,7 +367,6 @@ public class MySqlDataReader : DbDataReader
                 {
                     _hasMoreResults = row.HasMoreResults;
                     _allRowsConsumed = true;
-                    _readPhaseTimeoutStarted = false;
                     break;
                 }
             }
@@ -399,8 +385,6 @@ public class MySqlDataReader : DbDataReader
         // 读取下一个结果（第一次或后续）
         var previousTimeout = client.Timeout;
         SetClientTimeout(client, CommandPhaseTimeout);
-        client.RestartTimeoutBudget();
-        _readPhaseTimeoutStarted = false;
 
         try
         {
