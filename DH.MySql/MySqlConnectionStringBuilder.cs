@@ -28,21 +28,6 @@ public class MySqlConnectionStringBuilder : DbConnectionStringBuilder
     /// <summary>命令超时</summary>
     public Int32 CommandTimeout { get => this[nameof(CommandTimeout)].ToInt(); set => this[nameof(CommandTimeout)] = value; }
 
-    /// <summary>是否启用连接池。默认true</summary>
-    public Boolean Pooling { get => TryGetValue(nameof(Pooling), out var value) ? value.ToBoolean() : true; set => this[nameof(Pooling)] = value; }
-
-    /// <summary>最小连接池大小。默认0</summary>
-    public Int32 MinimumPoolSize { get => TryGetValue(nameof(MinimumPoolSize), out var value) ? value.ToInt() : 0; set => this[nameof(MinimumPoolSize)] = value; }
-
-    /// <summary>最大连接池大小。默认100</summary>
-    public Int32 MaximumPoolSize { get => TryGetValue(nameof(MaximumPoolSize), out var value) ? value.ToInt() : 100; set => this[nameof(MaximumPoolSize)] = value; }
-
-    /// <summary>从连接池借出连接时是否执行会话重置。默认false</summary>
-    public Boolean ConnectionReset { get => TryGetValue(nameof(ConnectionReset), out var value) && value.ToBoolean(); set => this[nameof(ConnectionReset)] = value; }
-
-    /// <summary>连接归还连接池后，短时间复用时跳过Ping验活的窗口期。单位秒，默认3，0表示每次都Ping</summary>
-    public Int32 PoolPingWindow { get => TryGetValue(nameof(PoolPingWindow), out var value) ? Math.Max(0, value.ToInt()) : 3; set => this[nameof(PoolPingWindow)] = Math.Max(0, value); }
-
     /// <summary>SSL模式。None/Preferred/Required，默认None</summary>
     public String? SslMode { get => this[nameof(SslMode)] as String; set => this[nameof(SslMode)] = value; }
 
@@ -84,11 +69,6 @@ public class MySqlConnectionStringBuilder : DbConnectionStringBuilder
             [nameof(Password)] = ["pass", "password", "pwd"],
             [nameof(ConnectionTimeout)] = ["connectiontimeout", "connection timeout"],
             [nameof(CommandTimeout)] = ["commandtimeout", "defaultcommandtimeout", "command timeout", "default command timeout"],
-            [nameof(Pooling)] = ["pooling"],
-            [nameof(MinimumPoolSize)] = ["minpoolsize", "minimumpoolsize", "min pool size", "minimum pool size"],
-            [nameof(MaximumPoolSize)] = ["maxpoolsize", "maximumpoolsize", "max pool size", "maximum pool size"],
-            [nameof(ConnectionReset)] = ["connectionreset", "connection reset"],
-            [nameof(PoolPingWindow)] = ["poolpingwindow", "pool ping window", "poolpinginterval", "pool ping interval"],
             [nameof(SslMode)] = ["sslmode", "ssl mode", "ssl-mode"],
             [nameof(UseServerPrepare)] = ["useserverprepare", "use server prepare", "use_server_prepare"],
             [nameof(Pipeline)] = ["pipeline", "pipelining"],
@@ -105,11 +85,6 @@ public class MySqlConnectionStringBuilder : DbConnectionStringBuilder
         Port = 3306;
         ConnectionTimeout = 15;
         CommandTimeout = 30;
-        Pooling = true;
-        MinimumPoolSize = 0;
-        MaximumPoolSize = 100;
-        ConnectionReset = false;
-        PoolPingWindow = 3;
         CharSet = MySqlCharSet.Utf8Mb4;
     }
 

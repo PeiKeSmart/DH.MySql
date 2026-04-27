@@ -359,7 +359,6 @@ public class MySqlDataReader : DbDataReader
         if (_FieldCount > 0 && !_allRowsConsumed)
         {
             SetClientTimeout(client, ReadPhaseTimeout);
-
             while (true)
             {
                 var row = await client.SkipRowAsync(cancellationToken).ConfigureAwait(false);

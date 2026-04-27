@@ -1,6 +1,5 @@
 ﻿using System.Data;
 using System.Data.Common;
-using System.Text;
 using NewLife.MySql.Common;
 
 namespace NewLife.MySql;
@@ -50,7 +49,6 @@ public sealed partial class MySqlConnection : DbConnection
 
     private MySqlPool? _pool;
     private SchemaProvider? _schemaProvider;
-    private Dictionary<String, DataTable>? _schemaCache;
     private readonly SemaphoreSlim _operationLock = new(1, 1);
     #endregion
 
@@ -94,7 +92,6 @@ public sealed partial class MySqlConnection : DbConnection
 
         Client = null;
         _pool = null;
-        ClearSchemaCache();
 
         if (client != null)
         {
@@ -152,7 +149,7 @@ public sealed partial class MySqlConnection : DbConnection
         SetState(ConnectionState.Connecting);
 
         SqlClient? borrowedClient = null;
-        var clientAttached = false;
+        Boolean clientAttached = false;
 
         try
         {
@@ -160,7 +157,7 @@ public sealed partial class MySqlConnection : DbConnection
             if (client == null)
             {
                 // 根据连接字符串创建连接池,然后从连接池获取连接
-                _pool = Setting.Pooling ? Factory?.PoolManager?.GetPool(Setting) : null;
+                _pool = Factory?.PoolManager?.GetPool(Setting);
 
                 if (_pool != null)
                 {
@@ -343,7 +340,6 @@ public sealed partial class MySqlConnection : DbConnection
         {
             Setting.Database = databaseName;
             _pool = null;
-            ClearSchemaCache();
             return;
         }
 
@@ -380,70 +376,8 @@ public sealed partial class MySqlConnection : DbConnection
     /// <summary>获取架构信息</summary>
     public override DataTable GetSchema(String? collectionName, String?[]? restrictionValues)
     {
-        var cacheKey = GetSchemaCacheKey(collectionName, restrictionValues);
-        if (_schemaCache != null && _schemaCache.TryGetValue(cacheKey, out var cached))
-            return cached.Copy();
-
         var provider = _schemaProvider ??= new SchemaProvider(this);
-        var table = provider.GetSchema(collectionName, restrictionValues).AsDataTable();
-        var cache = _schemaCache ??= new Dictionary<String, DataTable>(StringComparer.Ordinal);
-        cache[cacheKey] = table.Copy();
-
-        return cache[cacheKey].Copy();
-    }
-
-    private void ClearSchemaCache()
-    {
-        _schemaProvider = null;
-        _schemaCache = null;
-    }
-
-    private static String GetSchemaCacheKey(String? collectionName, String?[]? restrictionValues)
-    {
-        var builder = new StringBuilder();
-        builder.Append(collectionName?.ToUpperInvariant() ?? SchemaProvider.MetaCollection.ToUpperInvariant());
-
-        if (restrictionValues == null || restrictionValues.Length == 0) return builder.ToString();
-
-        foreach (var item in restrictionValues)
-        {
-            builder.Append('\u001F');
-            builder.Append(item ?? "<null>");
-        }
-
-        return builder.ToString();
-    }
-
-    /// <summary>清理与指定连接关联的连接池</summary>
-    /// <param name="connection">连接</param>
-    public static void ClearPool(MySqlConnection connection)
-    {
-        if (connection == null) throw new ArgumentNullException(nameof(connection));
-        connection.Factory.PoolManager.ClearPool(connection.Setting);
-    }
-
-    /// <summary>异步清理与指定连接关联的连接池</summary>
-    /// <param name="connection">连接</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>异步任务</returns>
-    public static Task ClearPoolAsync(MySqlConnection connection, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        ClearPool(connection);
-        return Task.FromResult(0);
-    }
-
-    /// <summary>清理所有连接池</summary>
-    public static void ClearAllPools() => MySqlClientFactory.Instance.PoolManager.ClearAllPools();
-
-    /// <summary>异步清理所有连接池</summary>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>异步任务</returns>
-    public static Task ClearAllPoolsAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        ClearAllPools();
-        return Task.FromResult(0);
+        return provider.GetSchema(collectionName, restrictionValues).AsDataTable();
     }
     #endregion
 

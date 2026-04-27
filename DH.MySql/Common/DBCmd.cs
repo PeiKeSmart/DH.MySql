@@ -88,8 +88,5 @@ public enum DbCmd : Byte
     SET_OPTION = 27,
 
     /// <summary>获取</summary>
-    FETCH = 28,
-
-    /// <summary>重置连接</summary>
-    RESET_CONNECTION = 31
+    FETCH = 28
 }

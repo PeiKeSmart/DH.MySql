@@ -128,7 +128,7 @@ public class MySqlCommand : DbCommand
     {
         if (IsPrepared) return;
 
-        var sql = NormalizeCommandSql(CommandText);
+        var sql = CommandText;
         if (sql.IsNullOrEmpty()) throw new InvalidOperationException("CommandText 不能为空");
 
         var client = _DbConnection?.Client ?? throw new InvalidOperationException("连接未打开");
@@ -137,20 +137,7 @@ public class MySqlCommand : DbCommand
         var paramOrder = new List<Int32>();
         var prepSql = ConvertToPositionalParameters(sql, _parameters, paramOrder);
 
-        PrepareResult result;
-        try
-        {
-            result = await client.PrepareStatementAsync(prepSql, cancellationToken).ConfigureAwait(false);
-        }
-        catch (MySqlException ex)
-        {
-            var sqlInfo = BuildPrepareSqlInfo(sql, prepSql);
-            if (!ex.State.IsNullOrEmpty())
-                throw new MySqlException(ex.ErrorCode, ex.State, $"{ex.Message} SQL={sqlInfo}");
-
-            throw new MySqlException(ex.ErrorCode, $"{ex.Message} SQL={sqlInfo}");
-        }
-
+        var result = await client.PrepareStatementAsync(prepSql, cancellationToken).ConfigureAwait(false);
         _statementId = result.StatementId;
         _paramColumns = result.Columns;
         _paramOrder = paramOrder.Count > 0 ? paramOrder.ToArray() : null;
@@ -212,15 +199,14 @@ public class MySqlCommand : DbCommand
         // 执行读取器，多语句由服务端拆分，通过NextResult()遍历
         try
         {
-            var effectiveCommandTimeout = GetEffectiveCommandTimeout(CommandTimeout, conn, previousTimeout);
             var reader = new MySqlDataReader
             {
                 Command = this,
                 OperationLease = operationLease,
                 OriginalTimeout = previousTimeout,
                 RestoreTimeoutOnClose = true,
-                CommandPhaseTimeout = effectiveCommandTimeout,
-                ReadPhaseTimeout = effectiveCommandTimeout
+                CommandPhaseTimeout = CommandTimeout,
+                ReadPhaseTimeout = previousTimeout
             };
             var isBinary = await ExecuteAsync(cancellationToken).ConfigureAwait(false);
             reader.IsBinaryProtocol = isBinary;
@@ -456,19 +442,6 @@ public class MySqlCommand : DbCommand
         return ordered;
     }
 
-    internal static Int32 GetEffectiveCommandTimeout(Int32 commandTimeout, MySqlConnection connection, Int32 fallbackTimeout)
-    {
-        if (connection == null) throw new ArgumentNullException(nameof(connection));
-
-        var timeout = commandTimeout;
-        if (timeout > 0) return timeout;
-
-        timeout = connection.Setting.CommandTimeout;
-        if (timeout > 0) return timeout;
-
-        return fallbackTimeout;
-    }
-
     private readonly struct BatchParameterBinding(MySqlParameter parameter)
     {
         public MySqlParameter Parameter { get; } = parameter;
@@ -546,7 +519,7 @@ public class MySqlCommand : DbCommand
         if (CommandType == CommandType.StoredProcedure)
             sql = BuildStoredProcedureCall();
         else
-            sql = SubstituteParameters(NormalizeCommandSql(CommandText), _parameters);
+            sql = SubstituteParameters(CommandText, _parameters);
 
         ms.Write(sql.GetBytes());
     }
@@ -875,54 +848,6 @@ public class MySqlCommand : DbCommand
         return sb.Return(true);
     }
 
-    internal static String NormalizeCommandSql(String sql)
-    {
-        if (sql.IsNullOrEmpty()) return sql;
-
-        var firstNonWhitespace = 0;
-        while (firstNonWhitespace < sql.Length && Char.IsWhiteSpace(sql[firstNonWhitespace]))
-            firstNonWhitespace++;
-
-        if (!IsKeywordAt(sql, firstNonWhitespace, "Update")) return sql;
-
-        var whereIndex = sql.IndexOf("Where", firstNonWhitespace, StringComparison.OrdinalIgnoreCase);
-        if (whereIndex <= 0) return sql;
-
-        var commaIndex = sql.LastIndexOf(',', whereIndex - 1, whereIndex - firstNonWhitespace);
-        if (commaIndex < 0) return sql;
-
-        var chars = sql.ToCharArray();
-        var changed = false;
-        var i = 0;
-        while (i < chars.Length)
-        {
-            var ch = chars[i];
-            if (ch == '\'' || ch == '"')
-            {
-                SkipStringLiteral(sql, ref i, null);
-                continue;
-            }
-
-            if (!IsKeywordAt(sql, i, "Where"))
-            {
-                i++;
-                continue;
-            }
-
-            var j = i - 1;
-            while (j >= 0 && Char.IsWhiteSpace(chars[j])) j--;
-            if (j >= 0 && chars[j] == ',')
-            {
-                chars[j] = ' ';
-                changed = true;
-            }
-
-            i += "Where".Length;
-        }
-
-        return changed ? new String(chars) : sql;
-    }
-
     /// <summary>按预编译参数顺序重排参数集合。如果无需重排则返回原集合</summary>
     /// <param name="parameters">原始参数集合</param>
     /// <param name="paramOrder">参数顺序映射</param>
@@ -952,20 +877,20 @@ public class MySqlCommand : DbCommand
     /// <param name="sql">SQL 字符串</param>
     /// <param name="i">当前索引，方法结束后指向字面量之后</param>
     /// <param name="sb">输出缓冲区</param>
-    private static void SkipStringLiteral(String sql, ref Int32 i, StringBuilder? sb)
+    private static void SkipStringLiteral(String sql, ref Int32 i, StringBuilder sb)
     {
         var quote = sql[i];
-        sb?.Append(quote);
+        sb.Append(quote);
         i++;
         while (i < sql.Length)
         {
             var ch = sql[i];
-            sb?.Append(ch);
+            sb.Append(ch);
             i++;
             if (ch == '\\' && i < sql.Length)
             {
                 // 反斜杠转义，跳过下一个字符
-                sb?.Append(sql[i]);
+                sb.Append(sql[i]);
                 i++;
             }
             else if (ch == quote)
@@ -973,54 +898,13 @@ public class MySqlCommand : DbCommand
                 // 引号重复转义（'' 或 ""）
                 if (i < sql.Length && sql[i] == quote)
                 {
-                    sb?.Append(sql[i]);
+                    sb.Append(sql[i]);
                     i++;
                 }
                 else
                     break;
             }
         }
-    }
-
-    private static Boolean IsKeywordAt(String sql, Int32 index, String keyword)
-    {
-        if (index < 0 || index + keyword.Length > sql.Length) return false;
-        if (!sql.AsSpan(index, keyword.Length).Equals(keyword, StringComparison.OrdinalIgnoreCase)) return false;
-
-        if (index > 0)
-        {
-            var prev = sql[index - 1];
-            if (Char.IsLetterOrDigit(prev) || prev == '_') return false;
-        }
-
-        var nextIndex = index + keyword.Length;
-        if (nextIndex < sql.Length)
-        {
-            var next = sql[nextIndex];
-            if (Char.IsLetterOrDigit(next) || next == '_') return false;
-        }
-
-        return true;
-    }
-
-    private static String BuildPrepareSqlInfo(String originalSql, String preparedSql)
-    {
-        var original = ShortenSqlForError(originalSql);
-        var prepared = ShortenSqlForError(preparedSql);
-
-        if (original == prepared) return prepared;
-
-        return $"original:{original}; prepared:{prepared}";
-    }
-
-    private static String ShortenSqlForError(String sql)
-    {
-        if (sql.IsNullOrEmpty()) return String.Empty;
-
-        var normalized = sql.Replace('\r', ' ').Replace('\n', ' ').Trim();
-        if (normalized.Length <= 512) return normalized;
-
-        return normalized[..512] + "...";
     }
     #endregion
 }

@@ -53,9 +53,6 @@ public class SqlClient : DisposeBase
     /// <summary>最后活跃时间。最后一次发送指令的时间</summary>
     public DateTime LastActive { get; set; }
 
-    /// <summary>最近一次归还到连接池的时间（UTC）</summary>
-    internal DateTime LastReturnedTime { get; set; }
-
     /// <summary>当前数据库名。记录正在使用的数据库，首次打开连接时赋值，调用 SetDatabaseAsync 后会更新</summary>
     public String Database { get; set; } = null!;
 
@@ -380,8 +377,6 @@ public class SqlClient : DisposeBase
 
         return dic;
     }
-
-    internal void ResetSequence() => _seq = 0;
     #endregion
 
     #region 网络操作
@@ -440,12 +435,12 @@ public class SqlClient : DisposeBase
     {
         var ms = _stream ?? throw new InvalidOperationException("未打开连接");
 
+        // 根据 Timeout 属性创建超时令牌，确保不会无限等待
         var timeout = Timeout;
-        var msTimeout = GetReadTimeoutMilliseconds(timeout);
         using var cts = timeout > 0
             ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
             : null;
-        cts?.CancelAfter(msTimeout);
+        cts?.CancelAfter(timeout * 1000);
         var token = cts?.Token ?? cancellationToken;
 
         try
@@ -493,8 +488,6 @@ public class SqlClient : DisposeBase
             throw new TimeoutException($"读取数据包超时({timeout}s)");
         }
     }
-
-    internal static Int32 GetReadTimeoutMilliseconds(Int32 timeout) => timeout > 0 ? checked(timeout * 1000) : global::System.Threading.Timeout.Infinite;
 
     private void WritePacketLog(String direction, Byte sequence, ReadOnlySpan<Byte> payload, Int32 length)
     {
@@ -700,32 +693,6 @@ public class SqlClient : DisposeBase
         }
     }
 
-    /// <summary>异步重置当前会话状态。优先使用 COM_RESET_CONNECTION，失败时回退到 COM_CHANGE_USER。</summary>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>异步任务</returns>
-    public async Task ResetConnectionAsync(CancellationToken cancellationToken = default)
-    {
-        if (!Active || _stream == null) throw new InvalidOperationException("连接未打开");
-        if (Welcome == null) throw new InvalidOperationException("握手信息不存在");
-
-        try
-        {
-            await SendCommandAsync(DbCmd.RESET_CONNECTION, cancellationToken).ConfigureAwait(false);
-
-            using var rs = await ReadPacketAsync(cancellationToken).ConfigureAwait(false);
-            if (!rs.IsOK) throw new MySqlException("重置连接失败");
-        }
-        catch (MySqlException ex) when (ex.ErrorCode == 1047 || ex.ErrorCode == 1064)
-        {
-            var auth = new Authentication(this);
-            await auth.AuthenticateAsync(Welcome, true, cancellationToken).ConfigureAwait(false);
-        }
-
-        Variables = null;
-        Database = Setting.Database ?? String.Empty;
-        _reader.Reset();
-    }
-
     /// <summary>异步切换当前数据库。使用 COM_INIT_DB 二进制命令</summary>
     /// <param name="databaseName">目标数据库名</param>
     /// <param name="cancellationToken">取消令牌</param>
@@ -881,11 +848,10 @@ public class SqlClient : DisposeBase
         var ms = _stream ?? throw new InvalidOperationException("未打开连接");
 
         var timeout = Timeout;
-        var msTimeout = GetReadTimeoutMilliseconds(timeout);
         using var cts = timeout > 0
             ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
             : null;
-        cts?.CancelAfter(msTimeout);
+        cts?.CancelAfter(timeout * 1000);
         var token = cts?.Token ?? cancellationToken;
 
         try
