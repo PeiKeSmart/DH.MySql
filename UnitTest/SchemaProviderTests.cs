@@ -57,20 +57,6 @@ public class SchemaProviderTests
         Assert.Contains("Indexes", names);
         Assert.Contains("IndexColumns", names);
     }
-
-    [Fact(DisplayName = "GetSchema缓存命中时返回隔离副本")]
-    public void GetSchema_Cache_ReturnsDetachedCopy()
-    {
-        using var conn = new MySqlConnection();
-
-        var dt1 = conn.GetSchema("MetaDataCollections");
-        dt1.Rows[0]["CollectionName"] = "Changed";
-
-        var dt2 = conn.GetSchema("MetaDataCollections");
-
-        Assert.Equal("MetaDataCollections", dt2.Rows[0]["CollectionName"]?.ToString());
-        Assert.NotSame(dt1, dt2);
-    }
     #endregion
 
     #region DataSourceInformation

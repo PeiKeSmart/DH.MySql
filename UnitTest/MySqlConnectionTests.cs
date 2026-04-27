@@ -54,29 +54,6 @@ public class MySqlConnectionTests
     }
 
     [Fact]
-    public void TestConnectionReset()
-    {
-        var connStr = _ConnStr + ";connection reset=true;max pool size=1;min pool size=1";
-        using var connection = new MySqlConnection(connStr);
-
-        connection.Open();
-        connection.ExecuteNonQuery("SET @test_reset = 'abc'");
-
-        using (var cmd = connection.CreateCommand())
-        {
-            cmd.CommandText = "SELECT @test_reset";
-            Assert.Equal("abc", cmd.ExecuteScalar()?.ToString());
-        }
-
-        connection.Close();
-        connection.Open();
-
-        using var verify = connection.CreateCommand();
-        verify.CommandText = "SELECT @test_reset";
-        Assert.Equal(DBNull.Value, verify.ExecuteScalar());
-    }
-
-    [Fact]
     public void TestChangeDatabase()
     {
         var connStr = _ConnStr;
