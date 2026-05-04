@@ -3,7 +3,6 @@ using System.Data.Common;
 using System.Text;
 using NewLife.Collections;
 using NewLife.Data;
-using NewLife.Log;
 using NewLife.MySql.Messages;
 
 namespace NewLife.MySql;
@@ -390,15 +389,6 @@ public class MySqlCommand : DbCommand
                     ps.AddWithValue(binding.ParameterName, val);
                 }
                 sets.Add(ps);
-            }
-
-            if (CommandText.StartsWithIgnoreCase("Update `Role` Set", "Update Role Set") && sets.Count > 0)
-            {
-                var first = sets[0];
-                var enable = first.Contains("Enable") ? first["Enable"]?.Value : null;
-                var isSystem = first.Contains("IsSystem") ? first["IsSystem"]?.Value : null;
-                var viewSensitive = first.Contains("ViewSensitive") ? first["ViewSensitive"]?.Value : null;
-                XTrace.WriteLine("Role批量更新首条拆包：Enable={0} IsSystem={1} ViewSensitive={2}", enable, isSystem, viewSensitive);
             }
 
             return await client.ExecuteStatementPipelineAsync(_statementId, sets, _paramColumns, cancellationToken).ConfigureAwait(false);
