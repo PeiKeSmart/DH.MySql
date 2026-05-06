@@ -14,7 +14,7 @@
     <NoWarn>1701;1702;NU5104;NETSDK1138;CS7035</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="DH.NCode" Version="4.22.2026.504-beta0914" />
+    <PackageReference Include="DH.NCode" Version="4.22.2026.506-beta0932" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DH.MySql\DH.MySql.csproj" />
