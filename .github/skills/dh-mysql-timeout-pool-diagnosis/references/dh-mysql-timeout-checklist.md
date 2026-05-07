@@ -32,6 +32,46 @@
 - 原有连接在等待结果，新连接又建不起来
 - 连接池借连接失败是后果，不是首发原因
 
+## 当前这条 72 秒慢 Insert 的专项判断
+
+日志里的 SQL 不是纯 Insert，而是：
+
+- Insert Into DL_HistoricalData_368(...)
+- 后面紧跟 Select LAST_INSERT_ID()
+
+同时堆栈落在：
+
+- MySqlCommand.ExecuteScalarAsync
+- MySqlDataReader.NextResultAsync
+- SqlClient.ReadPacketAsync
+
+这意味着当前要先区分三种可能：
+
+1. 数据库端 Insert 本身真的执行了 72 秒。
+2. Insert 已执行完，但驱动等待首个响应包时卡住。
+3. Insert 已执行完，首个 OK 包也处理了，但在读取后续 Select LAST_INSERT_ID() 结果集时卡住。
+
+在没有对照试验前，不要把这 72 秒直接定性成“数据库插入本身慢”。
+
+## 建议的最小对照调测
+
+先做最小 A/B，用同一条数据重复测试：
+
+1. DH.MySql ExecuteNonQuery 只跑 Insert。
+2. DH.MySql ExecuteScalar 跑 Insert;Select LAST_INSERT_ID()。
+3. MySql.Data ExecuteNonQuery 只跑 Insert。
+4. MySql.Data 执行等价的插入取回自增值流程。
+
+记录：
+
+- Open 耗时
+- ExecuteNonQuery 耗时
+- ExecuteScalar 耗时
+- 是否稳定卡在 NextResultAsync / ReadPacketAsync
+
+如果只有第 2 组明显异常，优先看当前库的多结果读取和超时语义。
+如果第 1 组也慢，优先看数据库端写入性能。
+
 ## 如何区分是不是当前库本身缺陷
 
 更像当前库直接参与的问题：
@@ -71,6 +111,7 @@
 3. 当前库的连接池验活与 Ping 逻辑，是否在大量失活连接时放大借连接成本。
 4. 当前库是否启用了 MySql.Data 没有使用的特性，例如 Pipeline、UseServerPrepare 或不同的批量执行模式。
 5. 异常是否总是先落在 SqlClient.ReadPacketAsync / OpenAsync，再扩散到 MySqlPool.GetAsync。
+6. 对于 InsertAndGetIdentity 场景，异常是否集中落在 NextResultAsync，也就是读取后续结果集而不是发送 Insert 本身。
 
 ## 给 Copilot 的输出模板
 
