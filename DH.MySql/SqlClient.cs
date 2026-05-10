@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using System.Diagnostics;
+using System.Collections.Concurrent;
 using System.Net.Security;
 using System.Net.Sockets;
 using System.Security.Authentication;
@@ -120,8 +121,12 @@ public class SqlClient : DisposeBase
         var msTimeout = set.ConnectionTimeout * 1000;
         if (msTimeout <= 0) msTimeout = 15000;
         Timeout = set.ConnectionTimeout > 0 ? set.ConnectionTimeout : 15;
+        var totalWatch = Stopwatch.StartNew();
+        var phaseWatch = Stopwatch.StartNew();
+        var phase = "tcp-connect";
 
         using var span = Tracer?.NewSpan($"db:{set.Database}:Open", new { server, port, set.UserID, set.SslMode, set.UseServerPrepare, set.Pipeline });
+        WriteConnectionTrace("start", totalWatch, null, $"allowSsl={allowSsl} timeout={msTimeout}ms sslMode={set.SslMode ?? "None"}");
 
         // 异步连接网络
         var client = new TcpClient();
@@ -144,16 +149,19 @@ public class SqlClient : DisposeBase
             }
             await connectTask.ConfigureAwait(false);
 #endif
+            WriteConnectionTrace(phase, totalWatch, phaseWatch, "tcp connected");
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
             span?.SetError(ex);
+            WriteConnectionError(phase, ex, totalWatch, phaseWatch, $"timeout={msTimeout}ms");
             client.Close();
             throw new TimeoutException($"连接 {server}:{port} 超时({msTimeout}ms)");
         }
         catch (Exception ex)
         {
             span?.SetError(ex);
+            WriteConnectionError(phase, ex, totalWatch, phaseWatch);
             client.Close();
             throw;
         }
@@ -168,9 +176,12 @@ public class SqlClient : DisposeBase
         try
         {
             // 异步读取欢迎信息
+            phase = "welcome";
+            phaseWatch.Restart();
             var welcome = await GetWelcomeAsync(cancellationToken).ConfigureAwait(false);
             Welcome = welcome;
             Capability = welcome.Capability;
+            WriteConnectionTrace(phase, totalWatch, phaseWatch, $"auth={welcome.AuthMethod} version={welcome.ServerVersion}");
 
             // SSL/TLS 握手
             var sslMode = set.SslMode;
@@ -178,6 +189,7 @@ public class SqlClient : DisposeBase
             {
                 if (sslMode.EqualIgnoreCase("Preferred") && CanSkipSsl(sslFallbackKey))
                 {
+                    WriteConnectionTrace("ssl-skip", totalWatch, null, "reuse cached plain-text fallback");
                     XTrace.WriteLine("[MySqlSsl] db={0} server={1}:{2} SslMode=Preferred skip TLS and use cached plain-text fallback",
                         set.Database, server, port);
                 }
@@ -185,12 +197,16 @@ public class SqlClient : DisposeBase
                 {
                     try
                     {
+                        phase = "ssl";
+                        phaseWatch.Restart();
                         await StartSslAsync(server!, cancellationToken).ConfigureAwait(false);
                         ClearSslFallback(sslFallbackKey);
+                        WriteConnectionTrace(phase, totalWatch, phaseWatch, "tls established");
                     }
                     catch (Exception ex) when (sslMode.EqualIgnoreCase("Preferred"))
                     {
                         MarkSslFallback(sslFallbackKey);
+                        WriteConnectionError("ssl", ex, totalWatch, phaseWatch, "preferred fallback to plain-text");
                         XTrace.WriteLine("[MySqlSsl] db={0} server={1}:{2} SslMode=Preferred fallback to plain text: {3}: {4}",
                             set.Database, server, port, ex.GetType().Name, ex.Message);
 
@@ -206,6 +222,7 @@ public class SqlClient : DisposeBase
                         Active = false;
                         _seq = 1;
 
+                        WriteConnectionTrace("ssl-fallback", totalWatch, null, "retry without tls");
                         await OpenAsync(false, cancellationToken).ConfigureAwait(false);
                         return;
                     }
@@ -221,7 +238,10 @@ public class SqlClient : DisposeBase
 
             // 异步验证
             var auth = new Authentication(this);
+            phase = "authenticate";
+            phaseWatch.Restart();
             await auth.AuthenticateAsync(welcome, false, cancellationToken).ConfigureAwait(false);
+            WriteConnectionTrace(phase, totalWatch, phaseWatch, $"method={method}");
 
             // 认证成功后，将 Capability 更新为实际协商的客户端标志
             Capability = auth.GetFlags(welcome.Capability);
@@ -231,10 +251,12 @@ public class SqlClient : DisposeBase
 
             // 认证成功后才标记为活动状态
             Active = true;
+            WriteConnectionTrace("complete", totalWatch, null, "physical open succeeded");
         }
         catch (Exception ex)
         {
             span?.SetError(ex);
+            WriteConnectionError(phase, ex, totalWatch, phaseWatch);
 
             // 认证/握手失败时清理资源，避免半初始化状态
             _client.TryDispose();
@@ -262,6 +284,28 @@ public class SqlClient : DisposeBase
     private static void MarkSslFallback(String key) => _sslFallbacks[key] = DateTime.UtcNow.Add(SslFallbackPeriod);
 
     private static void ClearSslFallback(String key) => _sslFallbacks.TryRemove(key, out _);
+
+    internal Boolean TraceConnectionEnabled => Setting.TraceConnection || Setting.TracePackets;
+
+    internal void WriteConnectionTrace(String phase, Stopwatch totalWatch, Stopwatch? phaseWatch, String? detail = null)
+    {
+        if (!TraceConnectionEnabled) return;
+
+        var phaseElapsed = phaseWatch?.ElapsedMilliseconds ?? 0;
+        var totalElapsed = totalWatch.ElapsedMilliseconds;
+        XTrace.WriteLine("[MySqlConnect] db={0} server={1}:{2} phase={3} phaseElapsed={4}ms totalElapsed={5}ms {6}",
+            Setting.Database, Setting.Server, Setting.Port, phase, phaseElapsed, totalElapsed, detail ?? String.Empty);
+    }
+
+    internal void WriteConnectionError(String phase, Exception ex, Stopwatch totalWatch, Stopwatch? phaseWatch, String? detail = null)
+    {
+        if (!TraceConnectionEnabled) return;
+
+        var phaseElapsed = phaseWatch?.ElapsedMilliseconds ?? 0;
+        var totalElapsed = totalWatch.ElapsedMilliseconds;
+        XTrace.WriteLine("[MySqlConnect] db={0} server={1}:{2} phase={3} phaseElapsed={4}ms totalElapsed={5}ms error={6}: {7} {8}",
+            Setting.Database, Setting.Server, Setting.Port, phase, phaseElapsed, totalElapsed, ex.GetType().Name, ex.Message, detail ?? String.Empty);
+    }
 
     /// <summary>异步发送SSL请求并升级为TLS连接</summary>
     /// <param name="server">服务器地址</param>

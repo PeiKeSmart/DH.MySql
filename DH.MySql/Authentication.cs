@@ -1,4 +1,5 @@
-﻿using System.ComponentModel;
+﻿using System.Diagnostics;
+using System.ComponentModel;
 using System.Security.Cryptography;
 using System.Text;
 using NewLife.Buffers;
@@ -19,6 +20,7 @@ class Authentication(SqlClient client)
     public async Task AuthenticateAsync(WelcomeMessage welcome, Boolean reset, CancellationToken cancellationToken)
     {
         var set = client.Setting;
+        var watch = Stopwatch.StartNew();
 
         // 从共享池申请内存，跳过4字节头部，便于SendPacket内部填充帧头
         using var pk = new OwnerPacket(1024);
@@ -59,14 +61,23 @@ class Authentication(SqlClient client)
 
         // 发送验证
         await client.SendPacketAsync(pk2, cancellationToken).ConfigureAwait(false);
+        client.WriteConnectionTrace("auth-send", watch, null, $"method={method} reset={reset}");
 
         // 读取响应
         using var rs = await client.ReadPacketAsync(cancellationToken).ConfigureAwait(false);
         // 如果返回0xFE，表示需要继续验证。例如 caching_sha2_password 验证降级为 mysql_native_password 验证
         if (rs.IsEOF)
+        {
+            client.WriteConnectionTrace("auth-switch", watch, null, "server requested auth method switch");
             await ToNativePasswordAsync(rs, set.Password!, cancellationToken).ConfigureAwait(false);
+        }
         else if (rs.Data[0] == 0x01 && rs.Data[1] == 0x04)
+        {
+            client.WriteConnectionTrace("auth-more-data", watch, null, "server requested full authentication");
             await PerformFullAuthenticationAsync(set.Password!, seed, cancellationToken).ConfigureAwait(false);
+        }
+        else
+            client.WriteConnectionTrace("auth-response", watch, null, $"response={rs.Data[0]:X2}");
     }
 
     private async Task ToNativePasswordAsync(ServerPacket rs, String password, CancellationToken cancellationToken)
@@ -76,12 +87,16 @@ class Authentication(SqlClient client)
         var authData = reader.ReadZero();
         if (authMethod == "mysql_native_password")
         {
+            var watch = Stopwatch.StartNew();
             var pass = Get411Password(password, authData.ToArray());
             await client.SendPacketAsync((ArrayPacket)pass, cancellationToken).ConfigureAwait(false);
+            client.WriteConnectionTrace("auth-native-send", watch, null, "send mysql_native_password response");
 
             using var rs2 = await client.ReadPacketAsync(cancellationToken).ConfigureAwait(false);
             if (!rs2.IsOK)
                 throw new InvalidOperationException("验证失败");
+
+            client.WriteConnectionTrace("auth-native-response", watch, null, "authentication switch succeeded");
         }
         else
             throw new NotSupportedException(authMethod);
@@ -89,9 +104,12 @@ class Authentication(SqlClient client)
 
     private async Task PerformFullAuthenticationAsync(String password, Byte[] seedBytes, CancellationToken cancellationToken)
     {
+        var watch = Stopwatch.StartNew();
+
         // request_public_key
         var buf = new Byte[] { 0x02 };
         await client.SendPacketAsync((ArrayPacket)buf, cancellationToken).ConfigureAwait(false);
+        client.WriteConnectionTrace("auth-public-key-request", watch, null, "request server public key");
 
         // 读取响应
         using var rs = await client.ReadPacketAsync(cancellationToken).ConfigureAwait(false);
@@ -108,11 +126,14 @@ class Authentication(SqlClient client)
 
         // 发送加密后的密码
         await client.SendPacketAsync((ArrayPacket)encryptedPassword, cancellationToken).ConfigureAwait(false);
+    client.WriteConnectionTrace("auth-password-send", watch, null, "send encrypted password");
 
         // 读取响应
         using var rs2 = await client.ReadPacketAsync(cancellationToken).ConfigureAwait(false);
         if (!rs2.IsOK)
             throw new InvalidOperationException("验证失败");
+
+    client.WriteConnectionTrace("auth-password-response", watch, null, "full authentication succeeded");
     }
 
     #region 辅助

@@ -1,5 +1,7 @@
-﻿using System.Data;
+﻿using System.Diagnostics;
+using System.Data;
 using System.Data.Common;
+using NewLife.Log;
 using NewLife.MySql.Common;
 
 namespace NewLife.MySql;
@@ -170,6 +172,10 @@ public sealed partial class MySqlConnection : DbConnection
         if (State == ConnectionState.Open) return;
 
         SetState(ConnectionState.Connecting);
+        var totalWatch = Stopwatch.StartNew();
+        var phaseWatch = Stopwatch.StartNew();
+        var phase = "start";
+        WriteOpenTrace(phase, totalWatch, null, $"pooling={(Factory?.PoolManager != null)}");
 
         SqlClient? borrowedClient = null;
         Boolean clientAttached = false;
@@ -180,20 +186,32 @@ public sealed partial class MySqlConnection : DbConnection
             if (client == null)
             {
                 // 根据连接字符串创建连接池,然后从连接池获取连接
+                phase = "pool";
+                phaseWatch.Restart();
                 _pool = Factory?.PoolManager?.GetPool(Setting);
 
                 if (_pool != null)
                 {
                     client = await _pool.GetAsync(cancellationToken).ConfigureAwait(false);
                     borrowedClient = client;
+                    WriteOpenTrace(phase, totalWatch, phaseWatch, "borrowed client from pool");
                 }
                 client ??= new SqlClient(Setting);
                 borrowedClient ??= client;
+                if (_pool == null)
+                    WriteOpenTrace(phase, totalWatch, phaseWatch, "pool unavailable, create direct client");
 
                 cancellationToken.ThrowIfCancellationRequested();
 
                 if (client.Welcome == null)
+                {
+                    phase = "physical-open";
+                    phaseWatch.Restart();
                     await client.OpenAsync(cancellationToken).ConfigureAwait(false);
+                    WriteOpenTrace(phase, totalWatch, phaseWatch, "opened physical connection");
+                }
+                else
+                    WriteOpenTrace("physical-open", totalWatch, null, "reuse already-open pooled client");
 
                 // 按更接近 MySql.Data 的语义，ConnectionTimeout 仅用于 Open 阶段。
                 // 打开后的默认读超时跟随 CommandTimeout，未配置时不额外施加网络读超时。
@@ -214,6 +232,7 @@ public sealed partial class MySqlConnection : DbConnection
                             _Version = serverVersion!;
                             ServerVersionComment = serverVersionComment;
                             _DatabaseType = databaseType;
+                            WriteOpenTrace("server-info", totalWatch, null, "reuse cached server info");
                         }
                         else
                         {
@@ -221,6 +240,8 @@ public sealed partial class MySqlConnection : DbConnection
                             Client = client;
                             try
                             {
+                                phase = "server-info";
+                                phaseWatch.Restart();
                                 using var cmd = new MySqlCommand(this, "SELECT @@version_comment");
                                 var comment = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as String;
                                 if (!comment.IsNullOrEmpty())
@@ -243,10 +264,13 @@ public sealed partial class MySqlConnection : DbConnection
 
                                     _pool?.SetServerInfo(_Version, ServerVersionComment, _DatabaseType);
                                 }
+
+                                WriteOpenTrace(phase, totalWatch, phaseWatch, ServerVersionComment.IsNullOrEmpty() ? "version_comment empty" : $"version_comment={ServerVersionComment}");
                             }
                             catch
                             {
                                 // 忽略探测错误，保持原有类型判断
+                                WriteOpenTrace("server-info", totalWatch, phaseWatch, "version_comment probe failed and was ignored");
                             }
                         }
                     }
@@ -260,12 +284,16 @@ public sealed partial class MySqlConnection : DbConnection
                 var vs = _pool?.Variables;
                 if (vs != null) client.Variables = vs;
 
+                phase = "configure";
+                phaseWatch.Restart();
                 await client.ConfigureAsync(cancellationToken).ConfigureAwait(false);
                 _pool?.Variables = client.Variables;
+                WriteOpenTrace(phase, totalWatch, phaseWatch, vs != null ? "reuse cached variables" : $"loaded variables={client.Variables?.Count ?? 0}");
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            WriteOpenError(phase, ex, totalWatch, phaseWatch);
             if (clientAttached || Client != null)
                 Close();
             else
@@ -276,6 +304,7 @@ public sealed partial class MySqlConnection : DbConnection
         }
 
         SetState(ConnectionState.Open);
+        WriteOpenTrace("complete", totalWatch, null, "connection opened");
     }
 
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP
@@ -426,6 +455,28 @@ public sealed partial class MySqlConnection : DbConnection
 
         // 默认为标准 MySQL
         return DatabaseType.MySQL;
+    }
+
+    private Boolean TraceOpenEnabled => Setting.TraceConnection || Setting.TracePackets;
+
+    private void WriteOpenTrace(String phase, Stopwatch totalWatch, Stopwatch? phaseWatch, String? detail = null)
+    {
+        if (!TraceOpenEnabled) return;
+
+        var phaseElapsed = phaseWatch?.ElapsedMilliseconds ?? 0;
+        var totalElapsed = totalWatch.ElapsedMilliseconds;
+        XTrace.WriteLine("[MySqlOpen] db={0} server={1}:{2} phase={3} phaseElapsed={4}ms totalElapsed={5}ms {6}",
+            Setting.Database, Setting.Server, Setting.Port, phase, phaseElapsed, totalElapsed, detail ?? String.Empty);
+    }
+
+    private void WriteOpenError(String phase, Exception ex, Stopwatch totalWatch, Stopwatch? phaseWatch)
+    {
+        if (!TraceOpenEnabled) return;
+
+        var phaseElapsed = phaseWatch?.ElapsedMilliseconds ?? 0;
+        var totalElapsed = totalWatch.ElapsedMilliseconds;
+        XTrace.WriteLine("[MySqlOpen] db={0} server={1}:{2} phase={3} phaseElapsed={4}ms totalElapsed={5}ms error={6}: {7}",
+            Setting.Database, Setting.Server, Setting.Port, phase, phaseElapsed, totalElapsed, ex.GetType().Name, ex.Message);
     }
     #endregion
 }
