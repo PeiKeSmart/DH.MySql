@@ -262,6 +262,7 @@ public class MySqlCommand : DbCommand
 
         var operationLease = await conn.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
         var previousTimeout = client.Timeout;
+        var readPhaseTimeout = CommandTimeout > 0 ? CommandTimeout : previousTimeout;
 
         // 执行读取器，多语句由服务端拆分，通过NextResult()遍历
         try
@@ -273,7 +274,7 @@ public class MySqlCommand : DbCommand
                 OriginalTimeout = previousTimeout,
                 RestoreTimeoutOnClose = true,
                 CommandPhaseTimeout = CommandTimeout,
-                ReadPhaseTimeout = previousTimeout
+                ReadPhaseTimeout = readPhaseTimeout
             };
             var isBinary = await ExecuteAsync(cancellationToken).ConfigureAwait(false);
             reader.IsBinaryProtocol = isBinary;

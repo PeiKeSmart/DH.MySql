@@ -119,6 +119,7 @@ public class SqlClient : DisposeBase
 
         var msTimeout = set.ConnectionTimeout * 1000;
         if (msTimeout <= 0) msTimeout = 15000;
+        Timeout = set.ConnectionTimeout > 0 ? set.ConnectionTimeout : 15;
 
         using var span = Tracer?.NewSpan($"db:{set.Database}:Open", new { server, port, set.UserID, set.SslMode, set.UseServerPrepare, set.Pipeline });
 

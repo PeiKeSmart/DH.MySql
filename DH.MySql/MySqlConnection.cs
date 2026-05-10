@@ -154,6 +154,12 @@ public sealed partial class MySqlConnection : DbConnection
         await OpenAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    internal static Int32 GetDefaultClientTimeout(MySqlConnectionStringBuilder setting)
+    {
+        var commandTimeout = setting.CommandTimeout;
+        return commandTimeout > 0 ? commandTimeout : 0;
+    }
+
     /// <summary>异步打开连接</summary>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns></returns>
@@ -188,6 +194,10 @@ public sealed partial class MySqlConnection : DbConnection
 
                 if (client.Welcome == null)
                     await client.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+                // 按更接近 MySql.Data 的语义，ConnectionTimeout 仅用于 Open 阶段。
+                // 打开后的默认读超时跟随 CommandTimeout，未配置时不额外施加网络读超时。
+                client.Timeout = GetDefaultClientTimeout(Setting);
 
                 var welcome = client.Welcome;
                 if (welcome != null)
@@ -245,10 +255,6 @@ public sealed partial class MySqlConnection : DbConnection
                 Client = client;
                 clientAttached = true;
                 borrowedClient = null;
-
-                // 默认网络读写超时跟随连接超时，命令执行阶段再临时切换到 CommandTimeout。
-                var readTimeout = Setting.ConnectionTimeout;
-                if (readTimeout > 0) client.Timeout = readTimeout;
 
                 // 配置参数，优先从连接池获取缓存的变量
                 var vs = _pool?.Variables;
