@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using NewLife;
 using NewLife.MySql;
 using NewLife.Security;

@@ -1,4 +1,4 @@
-﻿namespace NewLife.MySql.Common;
+namespace NewLife.MySql.Common;
 
 /// <summary>MySQL 几何数据类型。封装 WKB（Well-Known Binary）格式的几何数据</summary>
 /// <remarks>
