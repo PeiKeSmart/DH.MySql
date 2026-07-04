@@ -4,6 +4,7 @@ using System.Text;
 using NewLife.Collections;
 using NewLife.Data;
 using NewLife.Log;
+using NewLife.MySql.Common;
 using NewLife.MySql.Messages;
 
 namespace NewLife.MySql;
@@ -377,7 +378,7 @@ public class MySqlCommand : DbCommand
         if (sql.IsNullOrEmpty()) throw new InvalidOperationException("CommandText 不能为空");
 
         var client = _DbConnection?.Client ?? throw new InvalidOperationException("连接未打开");
-    using var operationLease = await _DbConnection.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
+        using var operationLease = await _DbConnection.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
 
         // 重置网络流
         if (!client.Reset()) throw new InvalidOperationException("数据库连接已断开");
@@ -448,7 +449,7 @@ public class MySqlCommand : DbCommand
         if (sql.IsNullOrEmpty()) throw new InvalidOperationException("CommandText 不能为空");
 
         var client = _DbConnection?.Client ?? throw new InvalidOperationException("连接未打开");
-    using var operationLease = await _DbConnection.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
+        using var operationLease = await _DbConnection.EnterOperationAsync(cancellationToken).ConfigureAwait(false);
 
         if (!client.Reset()) throw new InvalidOperationException("数据库连接已断开");
 
@@ -899,6 +900,7 @@ public class MySqlCommand : DbCommand
             DateTime dt => "'" + dt.ToString("yyyy-MM-dd HH:mm:ss.ffffff").TrimEnd('0').TrimEnd('.') + "'",
             DateTimeOffset dto => "'" + dto.ToString("yyyy-MM-dd HH:mm:ss.ffffff").TrimEnd('0').TrimEnd('.') + "'",
             Byte[] bytes => "X'" + bytes.ToHex() + "'",
+            MySqlGeometry geom => "X'" + geom.Value.ToHex() + "'",
             Guid guid => "'" + guid.ToString() + "'",
             Enum e => Convert.ToInt64(e).ToString(),
             Single f => f.ToString("R"),
