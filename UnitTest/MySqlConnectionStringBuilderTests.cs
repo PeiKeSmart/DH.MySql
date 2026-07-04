@@ -158,31 +158,10 @@ public class MySqlConnectionStringBuilderTests
     }
 
     [Fact]
-    [DisplayName("TraceConnection默认值为false")]
-    public void TestTraceConnectionDefault()
-    {
-        var builder = new MySqlConnectionStringBuilder();
-        Assert.False(builder.TraceConnection);
-    }
-
-    [Theory]
-    [InlineData("traceconnection")]
-    [InlineData("trace connection")]
-    [InlineData("connectiontrace")]
-    [InlineData("connection trace")]
-    [DisplayName("TraceConnection属性支持多种别名")]
-    public void TestTraceConnectionAliases(String alias)
-    {
-        var builder = new MySqlConnectionStringBuilder();
-        builder[alias] = true;
-        Assert.True(builder.TraceConnection);
-    }
-
-    [Fact]
     [DisplayName("解析包含所有参数的连接字符串")]
     public void TestFullConnectionString()
     {
-        var connStr = "server=myhost;port=3307;database=mydb;uid=admin;pwd=secret;connectiontimeout=20;commandtimeout=60;sslmode=Required;useserverprepare=true;pipeline=true;traceconnection=true";
+        var connStr = "server=myhost;port=3307;database=mydb;uid=admin;pwd=secret;connectiontimeout=20;commandtimeout=60;sslmode=Required;useserverprepare=true;pipeline=true";
         var builder = new MySqlConnectionStringBuilder(connStr);
 
         Assert.Equal("myhost", builder.Server);
@@ -195,7 +174,6 @@ public class MySqlConnectionStringBuilderTests
         Assert.Equal("Required", builder.SslMode);
         Assert.True(builder.UseServerPrepare);
         Assert.True(builder.Pipeline);
-        Assert.True(builder.TraceConnection);
     }
 
     [Fact]
