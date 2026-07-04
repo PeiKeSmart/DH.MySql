@@ -32,7 +32,7 @@
     <RepositoryUrl>https://github.com/PeiKeSmart/Pek.AspNetCore</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>湖北登灏科技有限公司;DH组件;DH;MySql;MySQL;ADO.NET;国产;高性能;批量;管道化;$(AssemblyName)</PackageTags>
-    <PackageReleaseNotes>追踪与可观测性增强；MySqlClientFactory 实现 ITracerFeature 接口并默认启用 Tracer，增强可观测性集成；MySqlPoolManager 埋点参数精简为 Server/Database，避免敏感信息泄露；SqlClient.PingAsync 调试模式下增加埋点并记录异常，便于连接问题诊断</PackageReleaseNotes>
+    <PackageReleaseNotes>新增 Unix Socket 本地连接与 zlib/zstd 压缩协议支持；新增 WebAuthn（FIDO2）免密认证；实现 MySqlBulkCopy 批量导入与 MySqlDataSource 依赖注入支持；支持 MySQL Geometry 空间数据类型（MySqlGeometry）；自动检测 AWS Aurora / GCP Cloud SQL；连接池支持存活期与空闲验活可配置参数；扩展 Schema 元数据查询；Pipeline(tx) 批量性能领先竞品 41~59%</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
