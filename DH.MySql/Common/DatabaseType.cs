@@ -1,4 +1,4 @@
-namespace NewLife.MySql.Common;
+﻿namespace NewLife.MySql.Common;
 
 /// <summary>数据库类型。支持 MySQL 及其兼容数据库</summary>
 public enum DatabaseType
@@ -17,4 +17,7 @@ public enum DatabaseType
 
     /// <summary>Google Cloud SQL MySQL（MySQL 协议兼容）</summary>
     GoogleCloudSql = 4,
+
+    /// <summary>Apache Doris 分析型数据库（MySQL 协议兼容）</summary>
+    Doris = 5,
 }
