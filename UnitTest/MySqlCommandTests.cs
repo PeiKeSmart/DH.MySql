@@ -1,8 +1,9 @@
-﻿using NewLife;
+﻿using System.ComponentModel;
+using System.Text;
+using NewLife;
 using NewLife.Log;
 using NewLife.MySql;
 using NewLife.Security;
-using System.Text;
 
 namespace UnitTest;
 
@@ -343,7 +344,7 @@ public class MySqlCommandTests : IDisposable
                   $"insert into `{_table}`(variable,value,set_time,set_by) values('ms_mixed2','v2',now(),'test');" +
                   $"update `{_table}` set value='v1_updated' where variable='ms_mixed1';" +
                   $"delete from `{_table}` where variable='ms_mixed2'";
-        
+
         using (var cmd = new MySqlCommand(_conn, sql))
         {
             var affected = cmd.ExecuteNonQuery();
@@ -378,7 +379,7 @@ public class MySqlCommandTests : IDisposable
 
         var sql = $"select 'before_insert' as result;" +
                   $"insert into `{_table}`(variable,value,set_time,set_by) values('ms_select_first','data',now(),'test')";
-        
+
         using (var cmd = new MySqlCommand(_conn, sql))
         {
             var rs = cmd.ExecuteScalar();
@@ -407,7 +408,7 @@ public class MySqlCommandTests : IDisposable
 
         var sql = $"insert into `{_table}`(variable,value,set_time,set_by) values('ms_insert_first','xyz',now(),'test');" +
                   $"select value from `{_table}` where variable='ms_insert_first'";
-        
+
         using (var cmd = new MySqlCommand(_conn, sql))
         {
             var rs = cmd.ExecuteScalar();
@@ -561,7 +562,7 @@ public class MySqlCommandTests : IDisposable
         {
             // 消费所有结果集
             while (dr.NextResult()) { }
-            
+
             // RecordsAffected应该是 1 INSERT + 1 UPDATE = 2
             Assert.Equal(2, dr.RecordsAffected);
         }
@@ -817,6 +818,26 @@ public class MySqlCommandTests : IDisposable
             var rs = cmd.ExecuteScalar();
             Assert.Equal(1L, rs);
         }
+    }
+    #endregion
+
+    #region DisposeAsync 测试
+    [Fact]
+    [DisplayName("预编译命令DisposeAsync关闭服务端语句")]
+    public async Task DisposeAsync_Unprepares()
+    {
+        var cmd = new MySqlCommand("SELECT ?", _conn);
+        cmd.Parameters.AddWithValue("", 1);
+        await cmd.PrepareAsync();
+        Assert.True(cmd.IsPrepared);
+
+        await cmd.DisposeAsync();
+
+        Assert.False(cmd.IsPrepared);
+
+        // 连接仍可用
+        using var verify = new MySqlCommand(_conn, "select 1");
+        Assert.Equal(1L, verify.ExecuteScalar());
     }
     #endregion
 }
