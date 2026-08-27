@@ -6,7 +6,7 @@
     <Description>Pure C# high-performance MySQL ADO.NET driver. Zero third-party dependencies, full async/await, Pipelined Batch Execution for 2~3× faster batch DML. MIT license. Supports net45~net10, MySQL 5.x~9.0+, OceanBase, TiDB, Doris, Aurora, CloudSQL.</Description>
     <Company>湖北登灏科技有限公司</Company>
     <Copyright>©2020-2026 湖北登灏科技有限公司</Copyright>
-    <VersionPrefix>4.24</VersionPrefix>
+    <VersionPrefix>4.25</VersionPrefix>
     <VersionSuffix>$([System.DateTime]::Now.ToString(`yyyy.MMdd`))</VersionSuffix>
     <Version>$(VersionPrefix).$(VersionSuffix)</Version>
     <FileVersion>$(Version)</FileVersion>
@@ -44,8 +44,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DH.NCore" Version="4.24.2026.726-beta0932" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.301">
+    <PackageReference Include="DH.NCore" Version="4.25.2026.825-beta0516" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.400">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
