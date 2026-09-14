@@ -19,7 +19,7 @@
 | **高性能** | 零额外内存分配（`ArrayPool` / `OwnerPacket`）、真异步 IO、管道化批量执行 |
 | **纯国产** | 核心代码完全自主可控，无 GPL 许可风险，适合信创环境 |
 | **大数据友好** | 字典参数集 / 数组绑定 / 管道化 / 多行 VALUES / DbBatch，覆盖万级到百万级行 |
-| **广泛兼容** | `net45` ~ `net10` 全版本，MySQL 5.x ~ 9.0+，兼容 OceanBase / TiDB / Doris / Aurora / CloudSQL |
+| **广泛兼容** | `net45` ~ `net11` 全版本，MySQL 5.x ~ 9.0+，兼容 OceanBase / TiDB / Doris / Aurora / CloudSQL |
 
 ## 核心功能
 
@@ -99,7 +99,7 @@
 
 ### 🌐 广泛兼容
 
-- **框架**：`net45` / `net461` / `netstandard2.0` / `netstandard2.1` / `net6.0` / `net10.0`
+- **框架**：`net45` / `net461` / `netstandard2.0` / `netstandard2.1` / `net6.0` / `net8.0` / `net10.0` / `net11.0`
 - **MySQL**：5.5 ~ 9.0+，`mysql_native_password` + `caching_sha2_password`
 - **兼容库**：OceanBase、TiDB、Doris（自动检测）、Aurora / CloudSQL（云数据库）、MariaDB（基础）
 - **条件编译**：针对不同框架自动选择最优实现
@@ -121,7 +121,7 @@
 | **DataAdapter** | ✅ | ❌ | ✅ |
 | **EF Core** | ✅ | ✅ (Pomelo) | ✅ |
 | **XCode ORM 集成** | ✅ | ❌ | ❌ |
-| **多目标框架** | net45~net10 | netstandard2.0+ | net462+ |
+| **多目标框架** | net45~net11 | netstandard2.0+ | net462+ |
 | **OceanBase / TiDB / Aurora / Doris** | ✅ 自动检测 | ❌ | ❌ |
 | **MySqlBulkCopy** | ✅ | ✅ | ✅ |
 | **压缩协议 (zlib/zstd)** | ✅ | ✅ | ❌ |
@@ -587,7 +587,8 @@ Console.WriteLine($"数据库类型: {conn2.DatabaseType}");  // TiDB
 | `net45` / `net461` | .NET Framework，兼容老项目 |
 | `netstandard2.0` / `netstandard2.1` | 跨平台兼容，支持异步 Dispose |
 | `net6.0` | 额外支持 DbBatch API |
-| `net10.0` | 最新 .NET，最优性能 |
+| `net10.0` | .NET 10（LTS） |
+| `net11.0` | 最新 .NET，最优性能 |
 
 ---
 

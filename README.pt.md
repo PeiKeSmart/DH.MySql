@@ -28,7 +28,7 @@ Sua inovadora **execução em lote pipeline** oferece desempenho DML em lote **2
 | Autenticação WebAuthn | ✅ | ✅ | ❌ |
 | DbDataSource | ✅ | ❌ | ❌ |
 | OceanBase / TiDB / Aurora / Doris | ✅ Detecção automática | ❌ | ❌ |
-| Frameworks suportados | net45 ~ net10 | net462+ | net462+ |
+| Frameworks suportados | net45 ~ net11 | net462+ | net462+ |
 
 ---
 
@@ -165,7 +165,8 @@ while (await reader.ReadAsync())
 | `netstandard2.1` | ✅ |
 | `net6.0` | ✅ + API DbBatch |
 | `net8.0` | ✅ |
-| `net10.0` | ✅ Último .NET |
+| `net10.0` | ✅ |
+| `net11.0` | ✅ Último .NET |
 
 ---
 

@@ -32,7 +32,7 @@ Its innovative **Pipelined Batch Execution** delivers **2–3× faster batch DML
 | EF Core Provider | ✅ | ✅ (Pomelo) | ✅ Official |
 | XCode ORM Native | ✅ | ❌ | ❌ |
 | OceanBase / TiDB / Aurora / Doris | ✅ Auto-detect | ❌ | ❌ |
-| Target Frameworks | net45 ~ net10 | net462+ | net462+ |
+| Target Frameworks | net45 ~ net11 | net462+ | net462+ |
 | Code Size | ~3,000 lines | ~30,000 lines | ~50,000 lines |
 
 ---
@@ -220,7 +220,8 @@ while (await reader.ReadAsync())
 | `netstandard2.1` | ✅ |
 | `net6.0` | ✅ + DbBatch API |
 | `net8.0` | ✅ |
-| `net10.0` | ✅ Latest .NET |
+| `net10.0` | ✅ |
+| `net11.0` | ✅ Latest .NET |
 
 ---
 

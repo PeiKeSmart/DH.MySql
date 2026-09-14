@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="Current">
   <PropertyGroup>
-    <TargetFrameworks>net45;net461;netstandard2.0;netstandard2.1;net6.0;net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net45;net461;netstandard2.0;netstandard2.1;net6.0;net8.0;net10.0;net11.0</TargetFrameworks>
     <AssemblyName>NewLife.MySql</AssemblyName>
     <AssemblyTitle>沛柯智能MySQL驱动</AssemblyTitle>
-    <Description>Pure C# high-performance MySQL ADO.NET driver. Zero third-party dependencies, full async/await, Pipelined Batch Execution for 2~3× faster batch DML. MIT license. Supports net45~net10, MySQL 5.x~9.0+, OceanBase, TiDB, Doris, Aurora, CloudSQL.</Description>
+    <Description>Pure C# high-performance MySQL ADO.NET driver. Zero third-party dependencies, full async/await, Pipelined Batch Execution for 2~3× faster batch DML. MIT license. Supports net45~net11, MySQL 5.x~9.0+, OceanBase, TiDB, Doris, Aurora, CloudSQL.</Description>
     <Company>湖北登灏科技有限公司</Company>
     <Copyright>©2020-2026 湖北登灏科技有限公司</Copyright>
     <VersionPrefix>4.25</VersionPrefix>

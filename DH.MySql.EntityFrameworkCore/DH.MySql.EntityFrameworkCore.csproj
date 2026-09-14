@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="Current">
   <PropertyGroup>
-    <TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net6.0;net8.0;net10.0;net11.0</TargetFrameworks>
     <AssemblyTitle>沛柯智能MySql EFCore提供程序</AssemblyTitle>
     <Description>基于DH.MySql的Entity Framework Core数据库提供程序，纯国产零依赖，支持管道化批量操作和DbBatch</Description>
     <Company>湖北登灏科技有限公司</Company>
@@ -50,6 +50,10 @@
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+  </ItemGroup>
+  <!-- .NET 11 尚未正式发布，官方 EF Core 参考包当前只有 RC1，暂固定到 RC1；正式版发布后改为 11.0.x -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="11.0.0-rc.1.26425.128" />
   </ItemGroup>
 
   <ItemGroup>

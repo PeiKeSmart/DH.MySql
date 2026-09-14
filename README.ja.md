@@ -28,7 +28,7 @@
 | WebAuthn 認証 | ✅ | ✅ | ❌ |
 | DbDataSource | ✅ | ❌ | ❌ |
 | OceanBase / TiDB / Aurora / Doris | ✅ 自動検出 | ❌ | ❌ |
-| 対象フレームワーク | net45 ~ net10 | net462+ | net462+ |
+| 対象フレームワーク | net45 ~ net11 | net462+ | net462+ |
 
 ---
 
@@ -165,7 +165,8 @@ while (await reader.ReadAsync())
 | `netstandard2.1` | ✅ |
 | `net6.0` | ✅ + DbBatch API |
 | `net8.0` | ✅ |
-| `net10.0` | ✅ 最新 .NET |
+| `net10.0` | ✅ |
+| `net11.0` | ✅ 最新 .NET |
 
 ---
 
